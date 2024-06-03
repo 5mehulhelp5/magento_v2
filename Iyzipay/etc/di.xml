@@ -1,18 +1,38 @@
 <?xml version="1.0" ?>
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+
     <preference for="Magento\Sales\Model\Order\Creditmemo\Total\Subtotal"
                 type="Iyzico\Iyzipay\Model\Order\Creditmemo\Total\Subtotal"/>
-    <preference for="Magento\Sales\Block\Adminhtml\Totals" type="Iyzico\Iyzipay\Block\Adminhtml\Totals"/>
+
+    <!-- IyzipayTotals -->
+    <preference for="Magento\Sales\Block\Adminhtml\Totals"
+                type="Iyzico\Iyzipay\Block\Adminhtml\IyzipayTotals"/>
+
+    <!-- IyzipayCreditmemoTotals -->
     <preference for="Magento\Sales\Block\Adminhtml\Order\Creditmemo\Totals"
-                type="Iyzico\Iyzipay\Block\Adminhtml\Order\Creditmemo\Totals"/>
-    <preference for="Magento\Sales\Block\Adminhtml\Order\Totals" type="Iyzico\Iyzipay\Block\Adminhtml\Order\Totals"/>
+                type="Iyzico\Iyzipay\Block\Adminhtml\Order\Creditmemo\IyzipayCreditmemoTotals"/>
+
+    <!-- IyzipayOrderTotals -->
+    <preference for="Magento\Sales\Block\Adminhtml\Order\Totals"
+                type="Iyzico\Iyzipay\Block\Adminhtml\Order\IyzipayOrderTotals"/>
+
+    <!-- IyzipayOrderInvoiceTotals -->
     <preference for="Magento\Sales\Block\Adminhtml\Order\Invoice\Totals"
-                type="Iyzico\Iyzipay\Block\Adminhtml\Order\Invoice\Totals"/>
+                type="Iyzico\Iyzipay\Block\Adminhtml\Order\Invoice\IyzipayOrderInvoiceTotals"/>
+
+    <!-- IyzipayInvoiceTotal -->
     <preference for="Magento\Sales\Block\Adminhtml\Invoice\Totals"
-                type="Iyzico\Iyzipay\Block\Adminhtml\Invoice\Totals"/>
-    <preference for="Magento\Sales\Block\Order\Totals" type="Iyzico\Iyzipay\Block\Order\Totals"/>
-    <preference for="Iyzico\Iyzipay\Infrastructure\Contracts\WebhookInterface" type="Iyzico\Iyzipay\Model\Api\Webhook"/>
+                type="Iyzico\Iyzipay\Block\Adminhtml\Invoice\IyzipayInvoiceTotal"/>
+
+    <!-- IyzipayOrderTotalsTemplate -->
+    <preference for="Magento\Sales\Block\Order\Totals"
+                type="Iyzico\Iyzipay\Block\Order\IyzipayOrderTotals"/>
+
+    <!-- IyzipayOrderInvoiceTotalsTemplate -->
+    <preference for="Iyzico\Iyzipay\Infrastructure\Contracts\WebhookInterface"
+                type="Iyzico\Iyzipay\Model\Api\Webhook"/>
+
     <type name="Magento\Framework\Webapi\Rest\Request\DeserializerFactory">
         <arguments>
             <argument name="deserializers" xsi:type="array">

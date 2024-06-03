@@ -1,32 +1,48 @@
 <?php
-/**
- * Copyright © Magento, Inc. All rights reserved.
- * See COPYING.txt for license details.
- */
+
 namespace Iyzico\Iyzipay\Block\Adminhtml\Order\Invoice;
 
-class Totals extends \Magento\Sales\Block\Order\Totals
+use Magento\Framework\DataObject;
+use Magento\Framework\Registry;
+use Magento\Framework\View\Element\Template\Context;
+use Magento\Sales\Block\Order\Totals;
+use Magento\Sales\Helper\Admin;
+
+/**
+ * Class IyzipayOrderInvoiceTotals
+ *
+ * This class extends Totals and is used to add custom totals to the invoice view in the admin panel.
+ *
+ * @package Iyzico\Iyzipay\Block\Adminhtml\Order\Invoice
+ * @extends Totals
+ *
+ * This class is used etc/di.xml
+ */
+class IyzipayOrderInvoiceTotals extends Totals
 {
 
     /**
-     * Admin helper
+     * Admin Helper
      *
-     * @var \Magento\Sales\Helper\Admin
+     * @var Admin
      */
-    protected $_adminHelper;
+    protected Admin $_adminHelper;
 
     /**
-     * @param \Magento\Framework\View\Element\Template\Context $context
-     * @param \Magento\Framework\Registry $registry
-     * @param \Magento\Sales\Helper\Admin $adminHelper
+     * IyzipayOrderInvoiceTotals constructor
+     *
+     * @param Context $context
+     * @param Registry $registry
+     * @param Admin $adminHelper
      * @param array $data
      */
     public function __construct(
-        \Magento\Framework\View\Element\Template\Context $context,
-        \Magento\Framework\Registry $registry,
-        \Magento\Sales\Helper\Admin $adminHelper,
-        array $data = []
-    ) {
+        Context  $context,
+        Registry $registry,
+        Admin    $adminHelper,
+        array    $data = []
+    )
+    {
         $this->_adminHelper = $adminHelper;
         parent::__construct($context, $registry, $data);
     }
@@ -34,7 +50,7 @@ class Totals extends \Magento\Sales\Block\Order\Totals
     /**
      * Format total value based on order currency
      *
-     * @param \Magento\Framework\DataObject $total
+     * @param DataObject $total
      * @return string
      */
     public function formatValue($total)
@@ -59,17 +75,17 @@ class Totals extends \Magento\Sales\Block\Order\Totals
          * Add Installment Fee
          */
         if ((double)$this->getSource()->getInstallmentFee() != 0) {
-            $this->_totals['installment_fee'] = new \Magento\Framework\DataObject(
+            $this->_totals['installment_fee'] = new DataObject(
                 [
                     'code' => 'installment_fee',
                     'value' => $this->getSource()->getInstallmentFee(),
                     'base_value' => $this->getSource()->getInstallmentFee(),
-                    'label' => $this->getSource()->getInstallmentCount().' '.__('Installment'),
+                    'label' => $this->getSource()->getInstallmentCount() . ' ' . __('Installment'),
                 ]
             );
         }
 
-        $this->_totals['subtotal'] = new \Magento\Framework\DataObject(
+        $this->_totals['subtotal'] = new DataObject(
             [
                 'code' => 'subtotal',
                 'value' => $this->getSource()->getSubtotal(),
@@ -82,9 +98,9 @@ class Totals extends \Magento\Sales\Block\Order\Totals
          * Add shipping
          */
         if (!$this->getSource()->getIsVirtual() && ((double)$this->getSource()->getShippingAmount() ||
-            $this->getSource()->getShippingDescription())
+                $this->getSource()->getShippingDescription())
         ) {
-            $this->_totals['shipping'] = new \Magento\Framework\DataObject(
+            $this->_totals['shipping'] = new DataObject(
                 [
                     'code' => 'shipping',
                     'value' => $this->getSource()->getShippingAmount(),
@@ -103,7 +119,7 @@ class Totals extends \Magento\Sales\Block\Order\Totals
             } else {
                 $discountLabel = __('Discount');
             }
-            $this->_totals['discount'] = new \Magento\Framework\DataObject(
+            $this->_totals['discount'] = new DataObject(
                 [
                     'code' => 'discount',
                     'value' => $this->getSource()->getDiscountAmount(),
@@ -113,7 +129,7 @@ class Totals extends \Magento\Sales\Block\Order\Totals
             );
         }
 
-        $this->_totals['grand_total'] = new \Magento\Framework\DataObject(
+        $this->_totals['grand_total'] = new DataObject(
             [
                 'code' => 'grand_total',
                 'strong' => true,
