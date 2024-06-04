@@ -51,7 +51,7 @@ class IyzicoFormObjectGenerator
         $iyzico->forceThreeDS = "0";
         $iyzico->callbackUrl = $callBack . "Iyzico_Iyzipay/response/iyzicocheckoutform";
         $iyzico->cardUserKey = $cardUserKey;
-        $iyzico->paymentSource = "MAGENTO2|" . $magentoVersion . "|SPACE-1.8.0";
+        $iyzico->paymentSource = "MAGENTO2|" . $magentoVersion . "|SPACE-2.0.0";
         $iyzico->goBackUrl = $callBack;
 
         return $iyzico;
