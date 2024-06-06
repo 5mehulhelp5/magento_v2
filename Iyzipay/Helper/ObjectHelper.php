@@ -6,17 +6,13 @@ use stdClass;
 
 class ObjectHelper
 {
-    /**
-     * TODO: generateOption (yeni: createPaymentOption), generateBuyer (yeni: createBuyerObject), generateShippingAddress (yeni: createShippingAddressObject), generateBillingAddress (yeni: createBillingAddressObject), generateBasketItems (yeni: createBasketItems)
-     */
+    private $stringHelper;
+    private $priceHelper;
 
-    private StringHelper $stringHelper;
-    private PriceHelper $priceHelper;
-
-    public function __construct()
+    public function __construct(StringHelper $stringHelper, PriceHelper $priceHelper)
     {
-        $this->stringHelper = new StringHelper();
-        $this->priceHelper = new PriceHelper();
+        $this->stringHelper = $stringHelper;
+        $this->priceHelper = $priceHelper;
     }
 
     public function createPaymentOption($checkoutSession, $cardUserKey, $locale, $currency, $cardId, $callBack, $magentoVersion): stdClass
@@ -67,7 +63,6 @@ class ObjectHelper
 
     public function createShippingAddressObject($checkoutSession)
     {
-
         $shippingAddress = $checkoutSession->getShippingAddress();
         $shippingStreet = $this->stringHelper->concatenateStrings(...$shippingAddress->getStreet());
 
@@ -84,7 +79,6 @@ class ObjectHelper
 
     public function createBillingAddressObject($checkoutSession)
     {
-
         $billingAddress = $checkoutSession->getBillingAddress();
         $billingStreet = $this->stringHelper->concatenateStrings(...$billingAddress->getStreet());
 

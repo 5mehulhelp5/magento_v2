@@ -2,8 +2,6 @@
 
 namespace Iyzico\Iyzipay\Helper;
 
-use Magento\Tests\NamingConvention\true\string;
-
 class StringHelper
 {
     /**
@@ -36,7 +34,6 @@ class StringHelper
 
     public function validateString(string $string): string
     {
-
         if (!empty(trim($string))) {
             return $string;
         }

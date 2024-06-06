@@ -1,46 +1,32 @@
-<?xml version="1.0" ?>
-<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
-
-    <preference for="Magento\Sales\Model\Order\Creditmemo\Total\Subtotal"
-                type="Iyzico\Iyzipay\Model\Order\Creditmemo\Total\Subtotal"/>
-
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <preference for="Magento\Sales\Model\Order\Creditmemo\Total\Subtotal" type="Iyzico\Iyzipay\Model\Order\Creditmemo\Total\Subtotal"/>
     <!-- IyzipayTotals -->
-    <preference for="Magento\Sales\Block\Adminhtml\Totals"
-                type="Iyzico\Iyzipay\Block\Adminhtml\IyzipayTotals"/>
-
+    <preference for="Magento\Sales\Block\Adminhtml\Totals" type="Iyzico\Iyzipay\Block\Adminhtml\IyzipayTotals"/>
     <!-- IyzipayCreditmemoTotals -->
-    <preference for="Magento\Sales\Block\Adminhtml\Order\Creditmemo\Totals"
-                type="Iyzico\Iyzipay\Block\Adminhtml\Order\Creditmemo\IyzipayCreditmemoTotals"/>
-
+    <preference for="Magento\Sales\Block\Adminhtml\Order\Creditmemo\Totals" type="Iyzico\Iyzipay\Block\Adminhtml\Order\Creditmemo\IyzipayCreditmemoTotals"/>
     <!-- IyzipayOrderTotals -->
-    <preference for="Magento\Sales\Block\Adminhtml\Order\Totals"
-                type="Iyzico\Iyzipay\Block\Adminhtml\Order\IyzipayOrderTotals"/>
-
+    <preference for="Magento\Sales\Block\Adminhtml\Order\Totals" type="Iyzico\Iyzipay\Block\Adminhtml\Order\IyzipayOrderTotals"/>
     <!-- IyzipayOrderInvoiceTotals -->
-    <preference for="Magento\Sales\Block\Adminhtml\Order\Invoice\Totals"
-                type="Iyzico\Iyzipay\Block\Adminhtml\Order\Invoice\IyzipayOrderInvoiceTotals"/>
-
+    <preference for="Magento\Sales\Block\Adminhtml\Order\Invoice\Totals" type="Iyzico\Iyzipay\Block\Adminhtml\Order\Invoice\IyzipayOrderInvoiceTotals"/>
     <!-- IyzipayInvoiceTotal -->
-    <preference for="Magento\Sales\Block\Adminhtml\Invoice\Totals"
-                type="Iyzico\Iyzipay\Block\Adminhtml\Invoice\IyzipayInvoiceTotal"/>
-
+    <preference for="Magento\Sales\Block\Adminhtml\Invoice\Totals" type="Iyzico\Iyzipay\Block\Adminhtml\Invoice\IyzipayInvoiceTotal"/>
     <!-- IyzipayOrderTotalsTemplate -->
-    <preference for="Magento\Sales\Block\Order\Totals"
-                type="Iyzico\Iyzipay\Block\Order\IyzipayOrderTotals"/>
-
+    <preference for="Magento\Sales\Block\Order\Totals" type="Iyzico\Iyzipay\Block\Order\IyzipayOrderTotals"/>
     <!-- IyzipayOrderInvoiceTotalsTemplate -->
-    <preference for="Iyzico\Iyzipay\Infrastructure\Contracts\WebhookInterface"
-                type="Iyzico\Iyzipay\Model\Api\Webhook"/>
-
+    <preference for="Iyzico\Iyzipay\Infrastructure\Contracts\WebhookInterface" type="Iyzico\Iyzipay\Model\Api\Webhook"/>
+    <!-- Helper Injections -->
+    <type name="Iyzico\Iyzipay\Helper\ObjectHelper">
+        <arguments>
+            <argument name="stringHelper" xsi:type="object">Iyzico\Iyzipay\Helper\StringHelper</argument>
+            <argument name="priceHelper" xsi:type="object">Iyzico\Iyzipay\Helper\PriceHelper</argument>
+        </arguments>
+    </type>
     <type name="Magento\Framework\Webapi\Rest\Request\DeserializerFactory">
         <arguments>
             <argument name="deserializers" xsi:type="array">
                 <item name="application_x_www_form_urlencoded" xsi:type="array">
                     <item name="type" xsi:type="string">application/x-www-form-urlencoded</item>
-                    <item name="model" xsi:type="string">
-                        Iyzico\Iyzipay\Webapi\Rest\Request\Deserializer\XWwwFormUrlencoded
-                    </item>
+                    <item name="model" xsi:type="string">Iyzico\Iyzipay\Webapi\Rest\Request\Deserializer\XWwwFormUrlencoded</item>
                 </item>
                 <item name="application_json" xsi:type="array">
                     <item name="type" xsi:type="string">application/json</item>
@@ -62,8 +48,7 @@
         </arguments>
     </type>
     <type name="Magento\Framework\Webapi\Rest\Request">
-        <plugin name="force_html_response"
-                type="Iyzico\Iyzipay\Plugin\Magento\Framework\Webapi\Rest\Request"/>
+        <plugin name="force_html_response" type="Iyzico\Iyzipay\Plugin\Magento\Framework\Webapi\Rest\Request"/>
     </type>
     <type name="Magento\Framework\Webapi\Rest\Response\RendererFactory">
         <arguments>
