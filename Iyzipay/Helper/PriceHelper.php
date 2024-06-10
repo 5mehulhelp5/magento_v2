@@ -23,18 +23,24 @@ class PriceHelper
 
     public function parsePrice($price)
     {
-        if (!str_contains($price, ".")) {
-            return $price . ".0";
-        }
+        if (strpos($price, ".") === false) {
+	        return $price . ".0";
+	    }
 
-        $priceReversed = strrev($price);
-        $subStrIndex = strcspn($priceReversed, "1-9.") + 1;
+	    $subStrIndex = 0;
+	    $priceReversed = strrev($price);
+	    for ($i = 0; $i < strlen($priceReversed); $i++) {
+	        if (strcmp($priceReversed[$i], "0") == 0) {
+	            $subStrIndex = $i + 1;
+	        } else if (strcmp($priceReversed[$i], ".") == 0) {
+	            $priceReversed = "0" . $priceReversed;
+	            break;
+	        } else {
+	            break;
+	        }
+	    }
 
-        if (!str_contains($priceReversed, ".")) {
-            $priceReversed = "0" . $priceReversed;
-        }
-
-        return strrev(substr($priceReversed, $subStrIndex));
+	    return strrev(substr($priceReversed, $subStrIndex));
     }
 
 }

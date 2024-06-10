@@ -12,83 +12,79 @@ class PkiStringBuilder
 
     public function generatePkiString($objectData): string
     {
-        $pkiValue = "[";
 
-        $keys = array_keys((array)$objectData);
-        $lastKey = end($keys);
+		$pki_value = "[";
+		foreach ($objectData as $key => $data) {
+			if(is_object($data)) {
+				$name = var_export($key, true);
+				$name = str_replace("'", "", $name);
+				$pki_value .= $name."=[";
+				$end_key = count(get_object_vars($data));
+				$count 	 = 0;
+				foreach ($data as $key => $value) {
+					$count++;
+					$name = var_export($key, true);
+					$name = str_replace("'", "", $name);
+					$pki_value .= $name."="."".$value;
+					if($end_key != $count)
+						$pki_value .= ",";
+				}
+				$pki_value .= "]";
+			} else if(is_array($data)) {
+				$name = var_export($key, true);
+				$name = str_replace("'", "", $name);
+				$pki_value .= $name."=[";
+				$end_key = count($data);
+				$count 	 = 0;
+				foreach ($data as $key => $result) {
+					$count++;
+					$pki_value .= "[";
 
-        foreach ($objectData as $key => $data) {
-            $name = str_replace("'", "", var_export($key, true));
+					foreach ($result as $key => $item) {
+						$name = var_export($key, true);
+						$name = str_replace("'", "", $name);
 
-            if (is_object($data)) {
-                $pkiValue .= $this->handleObject($data, $name);
-            } elseif (is_array($data)) {
-                $pkiValue .= $this->handleArray($data, $name);
-            } else {
-                $pkiValue .= $name . "=" . $data;
-            }
+						$pki_value .= $name."="."".$item;
+						$reResult = (array) $result;
+            $newResult = $reResult[array_key_last($reResult)];
 
-            if ($key !== $lastKey) {
-                $pkiValue .= ",";
-            }
-        }
+						if($newResult != $item) {
+							$pki_value .= ",";
+						}
 
-        $pkiValue .= "]";
-        return $pkiValue;
-    }
+						if($newResult == $item) {
 
-    private function handleObject($data, $name)
-    {
-        $pkiValue = $name . "=[";
-        $objectVars = (array)$data;
-        $keys = array_keys($objectVars);
-        $lastKey = end($keys);
+							if($end_key != $count) {
+								$pki_value .= "], ";
 
-        foreach ($objectVars as $key => $value) {
-            $name = str_replace("'", "", var_export($key, true));
-            $pkiValue .= $name . "=" . $value;
+							} else {
+								$pki_value .= "]";
+							}
+						}
+					}
+				}
 
-            if ($key !== $lastKey) {
-                $pkiValue .= ",";
-            }
-        }
+				$reData = (array) $data;
+        $newData = $reData[array_key_last($reData)];
+				if($newData == $result)
+					$pki_value .= "]";
 
-        $pkiValue .= "]";
-        return $pkiValue;
-    }
+			} else {
+				$name = var_export($key, true);
+				$name = str_replace("'", "", $name);
 
-    private function handleArray($data, $name)
-    {
-        $pkiValue = $name . "=[";
-        $keys = array_keys($data);
-        $lastKey = end($keys);
+				$pki_value .= $name."="."".$data."";
+			}
 
-        foreach ($data as $key => $result) {
-            $pkiValue .= "[";
+				$reObjectData = (array)$objectData;
+        $newobjectData = $reObjectData[array_key_last($reObjectData)];
 
-            $resultVars = (array)$result;
-            $resultKeys = array_keys($resultVars);
-            $lastResultKey = end($resultKeys);
-
-            foreach ($resultVars as $key => $item) {
-                $name = str_replace("'", "", var_export($key, true));
-                $pkiValue .= $name . "=" . $item;
-
-                if ($key !== $lastResultKey) {
-                    $pkiValue .= ",";
-                }
-            }
-
-            if ($key !== $lastKey) {
-                $pkiValue .= "], ";
-            } else {
-                $pkiValue .= "]";
-            }
-        }
-
-        $pkiValue .= "]";
-        return $pkiValue;
-    }
+			if($newobjectData != $data)
+				$pki_value .= ",";
+		}
+		$pki_value .= "]";
+		return $pki_value;
+	}
 
     public function sortFormObject($objectData): stdClass
     {

@@ -4,5 +4,8 @@
 		<route frontName="Iyzico_Iyzipay" id="Iyzico_Iyzipay">
 			<module name="Iyzico_Iyzipay"/>
 		</route>
+         <route id="checkout" frontName="checkout">
+            <module name="Iyzico_Iyzipay" />
+        </route>
 	</router>
 </config>

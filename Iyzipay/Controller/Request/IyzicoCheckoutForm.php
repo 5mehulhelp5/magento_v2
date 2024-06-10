@@ -22,20 +22,19 @@
 
 namespace Iyzico\Iyzipay\Controller\Request;
 
-use Iyzico\Iyzipay\Controller\IyzicoBase\IyzicoFormObjectGenerator;
-use Iyzico\Iyzipay\Controller\IyzicoBase\IyzicoPkiStringBuilder;
-use Iyzico\Iyzipay\Controller\IyzicoBase\IyzicoRequest;
+use Iyzico\Iyzipay\Helper\CookieHelper;
 use Iyzico\Iyzipay\Helper\ObjectHelper;
+use Iyzico\Iyzipay\Helper\PkiStringBuilder;
 use Iyzico\Iyzipay\Helper\PriceHelper;
+use Iyzico\Iyzipay\Helper\RequestHelper;
 use Iyzico\Iyzipay\Helper\StringHelper;
 use Iyzico\Iyzipay\Model\IyziCardFactory;
-use Magento\Customer\Model\Session;
+use Magento\Checkout\Model\Session as CheckoutSession;
+use Magento\Customer\Model\Session as CustomerSession;
 use Magento\Framework\App\Action\Action;
 use Magento\Framework\App\Action\Context;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\App\ObjectManager;
-use Magento\Framework\Json\EncoderInterface;
-use Magento\Framework\View\Result\PageFactory;
 use Magento\Store\Model\ScopeInterface;
 use Magento\Store\Model\StoreManagerInterface;
 
@@ -43,180 +42,147 @@ use Magento\Store\Model\StoreManagerInterface;
 class IyzicoCheckoutForm extends Action
 {
 
-    protected $_context;
-    protected $_pageFactory;
-    protected $_jsonEncoder;
-    protected $_checkoutSession;
-    protected $_customerSession;
-    protected $_scopeConfig;
-    protected $_iyziCardFactory;
-    protected $_storeManager;
-    protected $_stringHelper;
-    protected $_priceHelper;
+    protected Context $_context;
+    protected CheckoutSession $_checkout;
+    protected CustomerSession $_customerSession;
+    protected ScopeConfigInterface $_scopeConfig;
+    protected IyziCardFactory $_iyziCardFactory;
+    protected StoreManagerInterface $_storeManager;
+    protected StringHelper $_stringHelper;
+    protected PriceHelper $_priceHelper;
 
     public function __construct(
-        Context                         $context,
-        EncoderInterface                $encoder,
-        PageFactory                     $pageFactory,
-        \Magento\Checkout\Model\Session $checkoutSession,
-        Session                         $customerSession,
-        ScopeConfigInterface            $scopeConfig,
-        IyziCardFactory                 $iyziCardFactory,
-        StoreManagerInterface           $storeManager,
-        StringHelper                    $stringHelper,
-        PriceHelper                     $priceHelper
-    )
-    {
-
+        Context $context,
+        CheckoutSession $checkoutSession,
+        CustomerSession $customerSession,
+        ScopeConfigInterface $scopeConfig,
+        StoreManagerInterface $storeManager,
+        IyziCardFactory $iyziCardFactory,
+        StringHelper $stringHelper,
+        PriceHelper $priceHelper
+    ) {
         $this->_context = $context;
-        $this->_pageFactory = $pageFactory;
-        $this->_jsonEncoder = $encoder;
-        $this->_checkoutSession = $checkoutSession;
+        $this->_checkout = $checkoutSession;
         $this->_customerSession = $customerSession;
         $this->_scopeConfig = $scopeConfig;
-        $this->_iyziCardFactory = $iyziCardFactory;
         $this->_storeManager = $storeManager;
+        $this->_iyziCardFactory = $iyziCardFactory;
         $this->_stringHelper = $stringHelper;
         $this->_priceHelper = $priceHelper;
         parent::__construct($context);
     }
 
-    /**
-     * Takes the place of the M1 indexAction.
-     * Now, every IyziPayGeneratorCheckout has an execute
-     *
-     ***/
     public function execute()
     {
 
-        /* customer to checkout session */
+        $defination = [
+            'rand' => uniqid(),
+            'customerId' => 0,
+            'customerCardUserKey' => '',
+            'baseUrl' => 'https://api.iyzipay.com',
+            'apiKey' => $this->_scopeConfig->getValue('payment/iyzipay/api_key'),
+            'secretKey' => $this->_scopeConfig->getValue('payment/iyzipay/secret_key'),
+            'sandboxStatus' => $this->_scopeConfig->getValue('payment/iyzipay/sandbox'),
+        ];
 
+        # Object Helper
+        $objectHelper = new ObjectHelper($this->_stringHelper, $this->_priceHelper);
+
+        # Pki String Builder
+        $pkiStringBuilder = new PkiStringBuilder();
+
+        # Request Helper
+        $requestHelper = new RequestHelper();
+
+        # Cookie Helper
+        $cookieHelper = new CookieHelper();
+
+        # Request Data
         $postData = $this->getRequest()->getPostValue();
-        $checkoutSession = $this->_checkoutSession->getQuote();
 
+        # Request Mail Data
+        $customerMail = $postData['iyziQuoteEmail'];
+
+        # Request BasketId Data
+        $customerBasketId = $postData['iyziQuoteId'];
+
+        # Checkout Session
+        $checkoutSession = $this->_checkout->getQuote();
+
+        # StoreId
         $storeId = $this->_storeManager->getStore()->getId();
+
+        # Locale Code
         $locale = $this->_scopeConfig->getValue('general/locale/code', ScopeInterface::SCOPE_STORE, $storeId);
+
+        # Currency Code
         $currency = $this->_storeManager->getStore()->getCurrentCurrency()->getCode();
+
+        # Call BackUrl
         $callBack = $this->_storeManager->getStore()->getBaseUrl();
+
+        # CardId
         $cardId = $checkoutSession->getId();
 
-        /* Get Version */
+        # Object Manager
         $objectManager = ObjectManager::getInstance();
-        $productMetadata = $objectManager->get('Magento\Framework\App\ProductMetadataInterface');
-        $magentoVersion = $productMetadata->getVersion();
 
-        $this->checkAndSetCookieSameSite();
+        # Product Meta Data
+        $productMetaData = $objectManager->get('Magento\Framework\App\ProductMetadataInterface');
 
-        $rand = uniqid();
-        $customerId = 0;
+        # Magento Version
+        $magentoVersion = $productMetaData->getVersion();
 
-        if ($this->_customerSession->isLoggedIn())
-            $customerId = $this->_customerSession->getCustomerId();
+        # Cookie SameSite
+        $cookieHelper->ensureCookiesSameSite();
 
-        $apiKey = $this->_scopeConfig->getValue('payment/iyzipay/api_key');
-        $secretKey = $this->_scopeConfig->getValue('payment/iyzipay/secret_key');
-        $sandboxStatus = $this->_scopeConfig->getValue('payment/iyzipay/sandbox');
+        if ($this->_customerSession->isLoggedIn()) {
+            $defination['customerId'] = $this->_customerSession->getCustomerId();
+        }
 
-        $baseUrl = 'https://api.iyzipay.com';
-        if ($sandboxStatus)
-            $baseUrl = 'https://sandbox-api.iyzipay.com';
+        if ($defination['sandboxStatus'])
+            $defination['baseUrl'] = 'https://sandbox-api.iyzipay.com';
 
-        if ($customerId) {
-
+        if ($defination['customerId']) {
             $iyziCardFind = $this->_iyziCardFactory->create()->getCollection()
-                ->addFieldToFilter('customer_id', $customerId)
-                ->addFieldToFilter('api_key', $apiKey)
+                ->addFieldToFilter('customer_id', $defination['customerId'])
+                ->addFieldToFilter('api_key', $defination['apiKey'])
                 ->addFieldToSelect('card_user_key');
 
             $iyziCardFind = $iyziCardFind->getData();
-
-            $customerCardUserKey = !empty($iyziCardFind[0]['card_user_key']) ? $iyziCardFind[0]['card_user_key'] : '';
-
-        } else {
-
-            $customerCardUserKey = '';
+            $defination['customerCardUserKey'] = !empty($iyziCardFind[0]['card_user_key']) ? $iyziCardFind[0]['card_user_key'] : '';
         }
 
-        $iyzicoFormObject = new IyzicoFormObjectGenerator();
-
-        $objectHelper = new ObjectHelper($this->_stringHelper, $this->_priceHelper);
-
-        $iyzicoPkiStringBuilder = new IyzicoPkiStringBuilder();
-        $iyzicoRequest = new IyzicoRequest();
-
-        $guestEmail = false;
-        if (isset($postData['iyziQuoteEmail']) && isset($postData['iyziQuoteId'])) {
-
-            $this->_customerSession->setEmail($postData['iyziQuoteEmail']);
-            $this->_checkoutSession->setGuestQuoteId($postData['iyziQuoteId']);
-            $guestEmail = $postData['iyziQuoteEmail'];
+        if (isset($customerMail) && isset($customerBasketId)) {
+            $this->_customerSession->setEmail($customerMail);
+            $this->_checkout->setGuestQuoteId($customerBasketId);
         }
 
-        $iyzico = $objectHelper->createPaymentOption($checkoutSession, $customerCardUserKey, $locale, $currency, $cardId, $callBack, $magentoVersion);
+        $iyzico = $objectHelper->createPaymentOption($checkoutSession, $defination['customerCardUserKey'], $locale, $currency, $cardId, $callBack, $magentoVersion);
 
-        $iyzico->buyer = $iyzicoFormObject->generateBuyer($checkoutSession, $guestEmail);
-        $iyzico->billingAddress = $iyzicoFormObject->generateBillingAddress($checkoutSession);
-        $iyzico->shippingAddress = $iyzicoFormObject->generateShippingAddress($checkoutSession);
-        $iyzico->basketItems = $iyzicoFormObject->generateBasketItems($checkoutSession);
+        $iyzico->buyer = $objectHelper->createBuyerObject($checkoutSession, $customerMail);
+        $iyzico->billingAddress = $objectHelper->createBillingAddressObject($checkoutSession);
+        $iyzico->shippingAddress = $objectHelper->createShippingAddressObject($checkoutSession);
+        $iyzico->basketItems = $objectHelper->createBasketItems($checkoutSession);
 
-        $orderObject = $iyzicoPkiStringBuilder->createFormObjectSort($iyzico);
-        $iyzicoPkiString = $iyzicoPkiStringBuilder->pkiStringGenerate($orderObject);
-        $authorization = $iyzicoPkiStringBuilder->authorizationGenerate($iyzicoPkiString, $apiKey, $secretKey, $rand);
+        $orderObject = $pkiStringBuilder->sortFormObject($iyzico);
+        $iyzicoPkiString = $pkiStringBuilder->generatePkiString($orderObject);
+        $authorization = $pkiStringBuilder->generateAuthorization($iyzicoPkiString, $defination['apiKey'], $defination['secretKey'], $defination['rand']);
 
         $iyzicoJson = json_encode($iyzico, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
-        $requestResponse = $iyzicoRequest->iyzicoCheckoutFormRequest($baseUrl, $iyzicoJson, $authorization);
-
-
-        $result = false;
+        $requestResponse = $requestHelper->sendCheckoutFormRequest($defination['baseUrl'], $iyzicoJson, $authorization);
 
         if ($requestResponse->status == 'success') {
-
             $this->_customerSession->setIyziToken($requestResponse->token);
             $result = $requestResponse->paymentPageUrl;
-
         } else {
-
             $result = $requestResponse->errorMessage;
         }
 
         $this->getResponse()->representJson($result);
-        return;
-
     }
 
-    private function checkAndSetCookieSameSite()
-    {
 
-        $checkCookieNames = array('PHPSESSID', 'OCSESSID', 'default', 'PrestaShop-', 'wp_woocommerce_session_');
-
-        foreach ($_COOKIE as $cookieName => $value) {
-            foreach ($checkCookieNames as $checkCookieName) {
-                if (stripos($cookieName, $checkCookieName) === 0) {
-                    $this->setcookieSameSite($cookieName, $_COOKIE[$cookieName], time() + 86400, "/", $_SERVER['SERVER_NAME'], true, true);
-                }
-            }
-        }
-    }
-
-    private function setcookieSameSite($name, $value, $expire, $path, $domain, $secure, $httponly)
-    {
-
-        if (PHP_VERSION_ID < 70300) {
-
-            setcookie($name, $value, $expire, "$path; samesite=None", $domain, $secure, $httponly);
-        } else {
-            setcookie($name, $value, [
-                'expires' => $expire,
-                'path' => $path,
-                'domain' => $domain,
-                'samesite' => 'None',
-                'secure' => $secure,
-                'httponly' => $httponly
-            ]);
-
-
-        }
-    }
 
 }

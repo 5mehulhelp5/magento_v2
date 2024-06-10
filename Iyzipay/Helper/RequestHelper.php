@@ -5,7 +5,11 @@ namespace Iyzico\Iyzipay\Helper;
 class RequestHelper
 {
     /**
-     * TODO: iyzicoCheckoutFormRequest (yeni: sendCheckoutFormRequest), iyzicoCheckoutFormDetailRequest (yeni: sendCheckoutFormDetailRequest), iyzicoPostWebhookUrlKey (yeni: postWebhookUrlKey), iyzicoOverlayScriptRequest (yeni: sendOverlayScriptRequest), curlPost (yeni: sendCurlPostRequest)
+     * TODO: iyzicoCheckoutFormRequest (yeni: sendCheckoutFormRequest),
+     * TODO: iyzicoCheckoutFormDetailRequest (yeni: sendCheckoutFormDetailRequest),
+     * TODO: iyzicoPostWebhookUrlKey (yeni: postWebhookUrlKey),
+     * TODO: iyzicoOverlayScriptRequest (yeni: sendOverlayScriptRequest),
+     * TODO: curlPost (yeni: sendCurlPostRequest)
      */
 
     public function sendCheckoutFormRequest($baseUrl, $json, $authorizationData)

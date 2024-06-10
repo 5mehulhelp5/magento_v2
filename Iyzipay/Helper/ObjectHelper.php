@@ -118,7 +118,7 @@ class ObjectHelper
 
             $basketItems[$endKey] = new stdClass();
 
-            $basketItems[$endKey]->id = rand();
+            $basketItems[$endKey]->id = (string)rand();
             $basketItems[$endKey]->price = $this->priceHelper->parsePrice($shipping);
             $basketItems[$endKey]->name = "Cargo";
             $basketItems[$endKey]->category1 = "Cargo";
