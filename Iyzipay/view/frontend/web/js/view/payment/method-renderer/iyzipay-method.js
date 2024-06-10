@@ -25,12 +25,11 @@ define(
             payWithIyzico: function (){
                 var quoteEmail, guestQuoteId = false;
 
-
                 if(!additionalValidators.validate()) {   //Resolve checkout aggreement accept error
                     return false;
                 }
 
-                $( document ).ready(function() {
+                $(document).ready(function() {
 
                     $("#loadingBar").show();
 
@@ -43,9 +42,17 @@ define(
                         url: urlBuilder.build("Iyzico_Iyzipay/request/iyzicocheckoutform"),
                         data: {iyziQuoteEmail: quoteEmail, iyziQuoteId: guestQuoteId},
                         type: "post",
-                        dataType: "html"
-                    }).done(function (data) {
-                        window.location.href = data;
+                        dataType: "json",
+                        success: function (response) {
+                            if (response.success) {
+                                window.location.href = response.url;
+                            } else {
+                                window.location.href = urlBuilder.build(response.redirect + '?errorCode=' + response.errorCode + '&errorMessage=' + encodeURIComponent(response.errorMessage));
+                            }
+                        },
+                        error: function () {
+                            alert('An error occurred. Please try again.');
+                        }
                     });
 
                 });

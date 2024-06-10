@@ -37,6 +37,7 @@ use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\App\ObjectManager;
 use Magento\Store\Model\ScopeInterface;
 use Magento\Store\Model\StoreManagerInterface;
+use Magento\Framework\Controller\Result\JsonFactory;
 
 
 class IyzicoCheckoutForm extends Action
@@ -50,6 +51,7 @@ class IyzicoCheckoutForm extends Action
     protected StoreManagerInterface $_storeManager;
     protected StringHelper $_stringHelper;
     protected PriceHelper $_priceHelper;
+    protected $resultJsonFactory;
 
     public function __construct(
         Context $context,
@@ -59,7 +61,8 @@ class IyzicoCheckoutForm extends Action
         StoreManagerInterface $storeManager,
         IyziCardFactory $iyziCardFactory,
         StringHelper $stringHelper,
-        PriceHelper $priceHelper
+        PriceHelper $priceHelper,
+        JsonFactory $resultJsonFactory
     ) {
         $this->_context = $context;
         $this->_checkout = $checkoutSession;
@@ -69,6 +72,7 @@ class IyzicoCheckoutForm extends Action
         $this->_iyziCardFactory = $iyziCardFactory;
         $this->_stringHelper = $stringHelper;
         $this->_priceHelper = $priceHelper;
+        $this->resultJsonFactory = $resultJsonFactory;
         parent::__construct($context);
     }
 
@@ -175,12 +179,19 @@ class IyzicoCheckoutForm extends Action
 
         if ($requestResponse->status == 'success') {
             $this->_customerSession->setIyziToken($requestResponse->token);
-            $result = $requestResponse->paymentPageUrl;
+            $result = ['success' => true, 'url' => $requestResponse->paymentPageUrl];
         } else {
-            $result = $requestResponse->errorMessage;
+            $result = [
+                'success' => false,
+                'redirect' => 'checkout/error',
+                'errorCode' => $requestResponse->errorCode,
+                'errorMessage' => $requestResponse->errorMessage
+            ];
         }
 
-        $this->getResponse()->representJson($result);
+        $resultJson = $this->resultJsonFactory->create();
+        return $resultJson->setData($result);
+
     }
 
 
