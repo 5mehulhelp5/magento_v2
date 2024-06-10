@@ -21,15 +21,16 @@
 
 namespace Iyzico\Iyzipay\Model\Payment;
 
+use Magento\Quote\Api\Data\CartInterface;
+
 class Iyzipay extends \Magento\Payment\Model\Method\AbstractMethod
 {
-    const PLUGIN_VERSION = '1.8.0';
+    const PLUGIN_VERSION = '2.0.0';
     protected $_code = "iyzipay";
     protected $_isOffline = true;
 
-   public function isAvailable(
-        \Magento\Quote\Api\Data\CartInterface $quote = null
-    ) {
+    public function isAvailable(CartInterface $quote = null)
+    {
 
         return parent::isAvailable($quote);
     }
