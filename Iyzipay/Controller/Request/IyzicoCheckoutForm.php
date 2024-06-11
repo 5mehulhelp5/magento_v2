@@ -51,7 +51,7 @@ class IyzicoCheckoutForm extends Action
     protected StoreManagerInterface $_storeManager;
     protected StringHelper $_stringHelper;
     protected PriceHelper $_priceHelper;
-    protected $resultJsonFactory;
+    protected JsonFactory $_resultJsonFactory;
 
     public function __construct(
         Context $context,
@@ -72,7 +72,7 @@ class IyzicoCheckoutForm extends Action
         $this->_iyziCardFactory = $iyziCardFactory;
         $this->_stringHelper = $stringHelper;
         $this->_priceHelper = $priceHelper;
-        $this->resultJsonFactory = $resultJsonFactory;
+        $this->_resultJsonFactory = $resultJsonFactory;
         parent::__construct($context);
     }
 
@@ -83,10 +83,9 @@ class IyzicoCheckoutForm extends Action
             'rand' => uniqid(),
             'customerId' => 0,
             'customerCardUserKey' => '',
-            'baseUrl' => 'https://api.iyzipay.com',
+            'baseUrl' => $this->_scopeConfig->getValue('payment/iyzipay/sandbox') ?  : 'https://api.iyzipay.com',
             'apiKey' => $this->_scopeConfig->getValue('payment/iyzipay/api_key'),
             'secretKey' => $this->_scopeConfig->getValue('payment/iyzipay/secret_key'),
-            'sandboxStatus' => $this->_scopeConfig->getValue('payment/iyzipay/sandbox'),
         ];
 
         # Object Helper
@@ -144,9 +143,6 @@ class IyzicoCheckoutForm extends Action
             $defination['customerId'] = $this->_customerSession->getCustomerId();
         }
 
-        if ($defination['sandboxStatus'])
-            $defination['baseUrl'] = 'https://sandbox-api.iyzipay.com';
-
         if ($defination['customerId']) {
             $iyziCardFind = $this->_iyziCardFactory->create()->getCollection()
                 ->addFieldToFilter('customer_id', $defination['customerId'])
@@ -189,7 +185,7 @@ class IyzicoCheckoutForm extends Action
             ];
         }
 
-        $resultJson = $this->resultJsonFactory->create();
+        $resultJson = $this->_resultJsonFactory->create();
         return $resultJson->setData($result);
 
     }
