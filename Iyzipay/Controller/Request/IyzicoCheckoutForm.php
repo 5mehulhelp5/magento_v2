@@ -192,67 +192,88 @@ class IyzicoCheckoutForm extends Action
 
 
         if (isset($requestResponse->status) && $requestResponse->status == 'success') {
-
-            $this->_quote = $this->_checkoutSession->getQuote();
-            $this->_quote->setIyziCurrency($currency);
-
-            if ($this->_customerSession->isLoggedIn()) {
-                $magentoOrderId = $this->_cartManagement->placeOrder($this->_quote->getId());
-            } else {
-                $this->_quote->setCheckoutMethod($this->_cartManagement::METHOD_GUEST);
-                $this->_quote->setCustomerEmail($this->_customerSession->getEmail());
-                $magentoOrderId = $this->_cartManagement->placeOrder($this->_quote->getId());
-            }
-
-            $iyzicoOrderJob = $this->_objectManager->create('Iyzico\Iyzipay\Model\IyziOrderJob');
-
-            $iyzicoOrderJob->setData([
-                'magento_order_id' => $magentoOrderId,
-                'iyzico_payment_token' => $requestResponse->token,
-                'iyzico_conversationId' => $requestResponse->conversationId,
-                'expire_at' => date('Y-m-d H:i:s', strtotime('+1 day')),
-            ]);
-
-            try {
-                $iyzicoOrderJob->save();
-            } catch (\Exception $e) {
-                $this->_iyziLogger->critical($e->getMessage());
-            }
-
-            $this->_customerSession->setIyziToken($requestResponse->token);
-            $result = ['success' => true, 'url' => $requestResponse->paymentPageUrl];
-        }
-
-
-        if (isset($requestResponse->errorCode)) {
-            $result = [
-                'success' => false,
-                'redirect' => 'checkout/error',
-                'errorCode' => $requestResponse->errorCode,
-                'errorMessage' => $requestResponse->errorMessage
-            ];
-        }
-
-        if ($requestResponse === null) {
-            $this->_iyziLogger->critical(
-                "requestResponse is NULL",
-                [
-                    'fileName' => __FILE__,
-                    'lineNumber' => __LINE__
-                ],
-            );
-
-            $result = [
-                'success' => false,
-                'redirect' => 'checkout/error',
-                'errorCode' => 'IYZICO_CHECKOUT_FORM_REQUEST_NULL',
-                'errorMessage' => 'Check the Logs for more information. <br /> Contact: destek@iyzico.com'
-            ];
+            $this->processSuccessfulResponse($requestResponse, $currency);
+        } elseif (isset($requestResponse->errorCode)) {
+            $result = $this->processErrorResponse($requestResponse);
+        } elseif ($requestResponse === null) {
+            $result = $this->processNullResponse();
         }
 
         $resultJson = $this->_resultJsonFactory->create();
         return $resultJson->setData($result);
 
+    }
+
+    private function processSuccessfulResponse($requestResponse, $currency)
+    {
+        $this->_quote = $this->_checkoutSession->getQuote();
+        $this->_quote->setIyziCurrency($currency);
+
+        $magentoOrderId = $this->placeOrder();
+
+        $this->createIyziOrderJob($requestResponse, $magentoOrderId);
+
+        $this->_customerSession->setIyziToken($requestResponse->token);
+        return ['success' => true, 'url' => $requestResponse->paymentPageUrl];
+    }
+
+    private function placeOrder()
+    {
+        if ($this->_customerSession->isLoggedIn()) {
+            return $this->_cartManagement->placeOrder($this->_quote->getId());
+        }
+
+        $this->_quote->setCheckoutMethod($this->_cartManagement::METHOD_GUEST);
+        $this->_quote->setCustomerEmail($this->_customerSession->getEmail());
+        return $this->_cartManagement->placeOrder($this->_quote->getId());
+    }
+
+    private function createIyziOrderJob($requestResponse, $magentoOrderId)
+    {
+        $iyzicoOrderJob = $this->_objectManager->create('Iyzico\Iyzipay\Model\IyziOrderJob');
+
+        $iyzicoOrderJob->setData([
+            'magento_order_id' => $magentoOrderId,
+            'iyzico_payment_token' => $requestResponse->token,
+            'iyzico_conversationId' => $requestResponse->conversationId,
+            'expire_at' => date('Y-m-d H:i:s', strtotime('+1 day')),
+        ]);
+
+        try {
+            $iyzicoOrderJob->save();
+        } catch (\Exception $e) {
+            $this->_iyziLogger->critical($e->getMessage());
+        }
+    }
+
+    private function processErrorResponse($requestResponse)
+    {
+        $this->_iyziLogger->critical(
+            "Error Code: " . $requestResponse->errorCode . " Error Message: " . $requestResponse->errorMessage,
+            ['fileName' => __FILE__, 'lineNumber' => __LINE__]
+        );
+
+        return [
+            'success' => false,
+            'redirect' => 'checkout/error',
+            'errorCode' => $requestResponse->errorCode,
+            'errorMessage' => $requestResponse->errorMessage
+        ];
+    }
+
+    private function processNullResponse()
+    {
+        $this->_iyziLogger->critical(
+            "requestResponse must not be NULL",
+            ['fileName' => __FILE__, 'lineNumber' => __LINE__]
+        );
+
+        return [
+            'success' => false,
+            'redirect' => 'checkout/error',
+            'errorCode' => '0',
+            'errorMessage' => 'Check the Logs for more information.'
+        ];
     }
 
 
