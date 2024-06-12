@@ -70,10 +70,10 @@ class IyzipayInvoiceTotal extends Totals
     /**
      * Format total value based on order currency
      *
-     * @param DataObject $total
+     * @param $total
      * @return string
      */
-    public function formatValue(DataObject $total): string
+    public function formatValue($total): string
     {
         if (!$total->getIsFormatted()) {
             return $this->_adminHelper->displayPrices($this->getOrder(), $total->getBaseValue(), $total->getValue());
