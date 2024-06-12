@@ -35,7 +35,7 @@ class IyzicoFormObjectGenerator
         $this->helper = new IyzicoHelper();
     }
 
-    public function generateOption($checkoutSession, $cardUserKey, $locale, $currency, $cardId, $callBack, $magentoVersion)
+    public function generateOption($checkoutSession, $cardUserKey, $locale, $currency, $cartId, $callBack, $magentoVersion)
     {
 
         $iyzico = new stdClass();
@@ -46,7 +46,7 @@ class IyzicoFormObjectGenerator
         $iyzico->price = $this->helper->subTotalPriceCalc($checkoutSession);
         $iyzico->paidPrice = $this->helper->priceParser(round($checkoutSession->getGrandTotal(), 2));
         $iyzico->currency = $currency;
-        $iyzico->basketId = $cardId;
+        $iyzico->basketId = $cartId;
         $iyzico->paymentGroup = 'PRODUCT';
         $iyzico->forceThreeDS = "0";
         $iyzico->callbackUrl = $callBack . "Iyzico_Iyzipay/response/iyzicocheckoutform";
