@@ -15,16 +15,16 @@ class ObjectHelper
         $this->priceHelper = $priceHelper;
     }
 
-    public function createPaymentOption($checkoutSession, $cardUserKey, $locale, $currency, $cardId, $callBack, $magentoVersion): stdClass
+    public function createPaymentOption($checkoutSession, $cardUserKey, $locale, $conversationId, $currency, $cartId, $callBack, $magentoVersion): stdClass
     {
         $object = new stdClass();
 
         $object->locale = $this->stringHelper->extractLocale($locale);
-        $object->conversationId = "123456789";
+        $object->conversationId = $conversationId;
         $object->price = $this->priceHelper->calculateSubtotalPrice($checkoutSession);
         $object->paidPrice = $this->priceHelper->parsePrice(round($checkoutSession->getGrandTotal(), 2));
         $object->currency = $currency;
-        $object->basketId = $cardId;
+        $object->basketId = $cartId;
         $object->paymentGroup = 'PRODUCT';
         $object->forceThreeDS = "0";
         $object->callbackUrl = $callBack . "Iyzico_Iyzipay/response/iyzicocheckoutform";

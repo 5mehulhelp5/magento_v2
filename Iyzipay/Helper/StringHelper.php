@@ -2,11 +2,15 @@
 
 namespace Iyzico\Iyzipay\Helper;
 
+/**
+ * Class StringHelper
+ *
+ * This class is used to handle string operations
+ *
+ * @package Iyzico\Iyzipay\Helper
+ */
 class StringHelper
 {
-    /**
-     * TODO: cutLocale (yeni: extractLocale), trimString (yeni: concatenateStrings), dataCheck (yeni: validateString) gibi fonksiyonlar buraya taşınacak
-     */
 
     /**
      * Extracts the locale from the given locale string
@@ -32,6 +36,12 @@ class StringHelper
         return implode(' ', $address);
     }
 
+    /**
+     * Validates the given string
+     *
+     * @param string $string
+     * @return string
+     */
     public function validateString(string $string): string
     {
         if (!empty(trim($string))) {
@@ -39,5 +49,19 @@ class StringHelper
         }
 
         return "NOT PROVIDED";
+    }
+
+    /**
+     * Generate Conversation Id
+     *
+     * @param string $storeName
+     * @param int $cartId
+     *
+     * @return string
+     */
+    public function generateConversationId(string $storeName, int $cartId): string
+    {
+        $storeName = preg_replace('/[^A-Za-z0-9]/', '', $storeName);
+        return $storeName . $cartId . '_' . time();
     }
 }
