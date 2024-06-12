@@ -1,4 +1,5 @@
 <?php
+
 /**
  * iyzico Payment Gateway For Magento 2
  * Copyright (C) 2018 iyzico
@@ -21,32 +22,38 @@
 
 namespace Iyzico\Iyzipay\Setup;
 
-use \Magento\Framework\DB\Ddl\Table;
+use Magento\Framework\DB\Ddl\Table;
 use Magento\Framework\Setup\ModuleContextInterface;
 use Magento\Framework\Setup\SchemaSetupInterface;
 use Magento\Framework\Setup\InstallSchemaInterface;
 
 class InstallSchema implements InstallSchemaInterface
 {
+    public function install(SchemaSetupInterface $setup, ModuleContextInterface $context)
+    {
+        $setup->startSetup();
 
-    public function install(
-        SchemaSetupInterface $setup,
-        ModuleContextInterface $context
-    ) {
-
-        $installer = $setup;
-
-        if ($installer->tableExists('iyzico_order') && $installer->tableExists('iyzico_card') ) {
-            return;
+        if (!$setup->tableExists('iyzico_order')) {
+            $this->createIyzicoOrderTable($setup);
         }
 
-        $installer->startSetup();
+        if (!$setup->tableExists('iyzico_order_job')){
+            $this->createIyzicoOrderJobTable($setup);
+        }
 
-        /**
-         * Create table 'iyzico_order'
-         */
-        $table = $installer->getConnection()
-            ->newTable($installer->getTable('iyzico_order'))
+        if (!$setup->tableExists('iyzico_card')) {
+            $this->createIyzicoCardTable($setup);
+        }
+
+        $this->addColumnsToSalesOrderAndQuote($setup);
+
+        $setup->endSetup();
+    }
+
+    private function createIyzicoOrderTable(SchemaSetupInterface $setup)
+    {
+        $table = $setup->getConnection()
+            ->newTable($setup->getTable('iyzico_order'))
             ->addColumn(
                 'iyzico_order_id',
                 Table::TYPE_INTEGER,
@@ -55,7 +62,7 @@ class InstallSchema implements InstallSchemaInterface
                     'identity' => true,
                     'unsigned' => true,
                     'nullable' => false,
-                    'primary'  => true,
+                    'primary' => true,
                 ],
                 'iyzico Order Id'
             )
@@ -63,67 +70,45 @@ class InstallSchema implements InstallSchemaInterface
                 'payment_id',
                 Table::TYPE_INTEGER,
                 null,
-                [
-                    'nullable' => false,
-                ],
+                ['nullable' => false],
                 'iyzico Payment Id'
             )
             ->addColumn(
                 'order_id',
                 Table::TYPE_TEXT,
-                null,
-                [
-                    'nullable' => false,
-                ],
-                'iyzico Order Id'
+                255,
+                ['nullable' => false],
+                'Order Id'
             )
             ->addColumn(
                 'total_amount',
                 Table::TYPE_DECIMAL,
                 '10,2',
-                [
-                    'nullable' => false,
-                ],
+                ['nullable' => false],
                 'iyzico Total Amount'
-            )
-            ->addColumn(
-                'order_id',
-                Table::TYPE_INTEGER,
-                null,
-                [
-                    'unsigned' => true,
-                    'nullable' => false,
-                ],
-                'Order Id'
             )
             ->addColumn(
                 'status',
                 Table::TYPE_TEXT,
-                null,
-                [
-                    'nullable' => false,
-                ],
+                255,
+                ['nullable' => false],
                 'iyzico Status'
             )
             ->addColumn(
                 'created_at',
                 Table::TYPE_TIMESTAMP,
                 null,
-                [
-                    'nullable' => false,
-                    'default' => Table::TIMESTAMP_INIT,
-                ],
-                'iyzico Card - Created At'
+                ['nullable' => false, 'default' => Table::TIMESTAMP_INIT],
+                'Created At'
             )
             ->setComment('iyzico Order');
-        $installer->getConnection()->createTable($table);
+        $setup->getConnection()->createTable($table);
+    }
 
-
-         /**
-         * Create table 'iyzico_card'
-         */
-        $table = $installer->getConnection()
-            ->newTable($installer->getTable('iyzico_card'))
+    private function createIyzicoCardTable(SchemaSetupInterface $setup)
+    {
+        $table = $setup->getConnection()
+            ->newTable($setup->getTable('iyzico_card'))
             ->addColumn(
                 'iyzico_card_id',
                 Table::TYPE_INTEGER,
@@ -132,7 +117,7 @@ class InstallSchema implements InstallSchemaInterface
                     'identity' => true,
                     'unsigned' => true,
                     'nullable' => false,
-                    'primary'  => true,
+                    'primary' => true,
                 ],
                 'iyzico Card - Magento Card Id'
             )
@@ -140,64 +125,122 @@ class InstallSchema implements InstallSchemaInterface
                 'customer_id',
                 Table::TYPE_INTEGER,
                 null,
-                [
-                    'nullable' => false,
-                ],
+                ['nullable' => false],
                 'iyzico Card - Magento Customer Id'
             )
             ->addColumn(
                 'card_user_key',
                 Table::TYPE_TEXT,
-                null,
-                [
-                    'nullable' => false,
-                ],
+                255,
+                ['nullable' => false],
                 'iyzico Card - Card User Key'
             )
             ->addColumn(
                 'api_key',
                 Table::TYPE_TEXT,
-                null,
-                [
-                    'nullable' => false,
-                ],
+                255,
+                ['nullable' => false],
                 'iyzico Card - Api Key'
             )
             ->addColumn(
                 'created_at',
                 Table::TYPE_TIMESTAMP,
                 null,
-                [
-                    'nullable' => false,
-                    'default' => Table::TIMESTAMP_INIT,
-                ],
-                'iyzico Card - Created At'
+                ['nullable' => false, 'default' => Table::TIMESTAMP_INIT],
+                'Created At'
             )
-            ->setComment('iyzico Order');
-        $installer->getConnection()->createTable($table);
+            ->setComment('iyzico Card');
+        $setup->getConnection()->createTable($table);
+    }
 
+    private function createIyzicoOrderJobTable(SchemaSetupInterface $setup)
+    {
+        $table = $setup->getConnection()
+            ->newTable($setup->getTable('iyzico_order_job'))
+            ->addColumn(
+                'id',
+                Table::TYPE_INTEGER,
+                null,
+                [
+                    'identity' => true,
+                    'unsigned' => true,
+                    'nullable' => false,
+                    'primary' => true,
+                ],
+                'Id'
+            )
+            ->addColumn(
+                'magento_order_id',
+                Table::TYPE_INTEGER,
+                null,
+                ['nullable' => false],
+                'Magento Order Id'
+            )
+            ->addColumn(
+                'iyzico_payment_token',
+                Table::TYPE_TEXT,
+                null,
+                ['nullable' => false],
+                'iyzico Payment Token'
+            )
+            ->addColumn(
+                'iyzico_conversationId',
+                Table::TYPE_TEXT,
+                null,
+                ['nullable' => false],
+                'iyzico Payment Conversation Id'
+            )
+            ->addColumn(
+                'expire_at',
+                Table::TYPE_TIMESTAMP,
+                null,
+                ['nullable' => false],
+                'Payment Expire At'
+            )
+            ->setComment('iyzico Order Job List');
+        $setup->getConnection()->createTable($table);
+    }
 
-
+    private function addColumnsToSalesOrderAndQuote(SchemaSetupInterface $setup)
+    {
         $feeOptions = [
-            'type' =>  Table::TYPE_DECIMAL,
-            'length' => '10,2',
-            'visible' => false,
-            'required' => false,
-            'comment' => 'Installment Fee'
+            "type" => Table::TYPE_DECIMAL,
+            "length" => "10,2",
+            "visible" => false,
+            "required" => false,
+            "comment" => "Installment Fee",
         ];
 
         $feeCountOptions = [
-            'type' =>  Table::TYPE_INTEGER,
-            'visible' => false,
-            'required' => false,
-            'comment' => 'Installment Count'
+            "type" => Table::TYPE_INTEGER,
+            "visible" => false,
+            "required" => false,
+            "comment" => "Installment Count",
         ];
 
-        $installer->getConnection()->addColumn($installer->getTable("sales_order"), "installment_fee", $feeOptions);
-        $installer->getConnection()->addColumn($installer->getTable("quote"), "installment_fee", $feeOptions);
-        $installer->getConnection()->addColumn($installer->getTable("sales_order"), "installment_count", $feeCountOptions);
-        $installer->getConnection()->addColumn($installer->getTable("quote"), "installment_count", $feeCountOptions);
 
-        $installer->endSetup();
+        $setup->getConnection()->addColumn(
+            $setup->getTable('sales_order'),
+            'installment_fee',
+            $feeOptions
+        );
+
+        $setup->getConnection()->addColumn(
+            $setup->getTable('quote'),
+            'installment_fee',
+            $feeOptions
+        );
+
+        $setup->getConnection()->addColumn(
+            $setup->getTable('sales_order'),
+            'installment_count',
+            $feeCountOptions
+        );
+
+        $setup->getConnection()->addColumn(
+            $setup->getTable('quote'),
+            'installment_count',
+            $feeCountOptions
+        );
     }
 }

@@ -1,4 +1,5 @@
 <?php
+
 /**
  * iyzico Payment Gateway For Magento 2
  * Copyright (C) 2018 iyzico
@@ -31,10 +32,8 @@ class InstallData implements InstallDataInterface
     /**
      * {@inheritdoc}
      */
-    public function install(
-        ModuleDataSetupInterface $setup,
-        ModuleContextInterface $context
-    ) {
+    public function install(ModuleDataSetupInterface $setup, ModuleContextInterface $context)
+    {
         //Your install script
     }
 }
