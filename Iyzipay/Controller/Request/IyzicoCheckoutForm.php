@@ -38,13 +38,15 @@ use Magento\Framework\App\ObjectManager;
 use Magento\Store\Model\ScopeInterface;
 use Magento\Store\Model\StoreManagerInterface;
 use Magento\Framework\Controller\Result\JsonFactory;
+use Magento\Quote\Model\Quote;
+use Magento\Quote\Api\CartManagementInterface;
 
 
 class IyzicoCheckoutForm extends Action
 {
 
     protected Context $_context;
-    protected CheckoutSession $_checkout;
+    protected CheckoutSession $_checkoutSession;
     protected CustomerSession $_customerSession;
     protected ScopeConfigInterface $_scopeConfig;
     protected IyziCardFactory $_iyziCardFactory;
@@ -52,6 +54,8 @@ class IyzicoCheckoutForm extends Action
     protected StringHelper $_stringHelper;
     protected PriceHelper $_priceHelper;
     protected JsonFactory $_resultJsonFactory;
+    protected Quote $_quote;
+    protected CartManagementInterface $_cartManagement;
 
     public function __construct(
         Context $context,
@@ -62,10 +66,12 @@ class IyzicoCheckoutForm extends Action
         IyziCardFactory $iyziCardFactory,
         StringHelper $stringHelper,
         PriceHelper $priceHelper,
-        JsonFactory $resultJsonFactory
+        JsonFactory $resultJsonFactory,
+        Quote $quote,
+        CartManagementInterface $cartManagement,
     ) {
         $this->_context = $context;
-        $this->_checkout = $checkoutSession;
+        $this->_checkoutSession = $checkoutSession;
         $this->_customerSession = $customerSession;
         $this->_scopeConfig = $scopeConfig;
         $this->_storeManager = $storeManager;
@@ -73,6 +79,8 @@ class IyzicoCheckoutForm extends Action
         $this->_stringHelper = $stringHelper;
         $this->_priceHelper = $priceHelper;
         $this->_resultJsonFactory = $resultJsonFactory;
+        $this->_quote = $quote;
+        $this->_cartManagement = $cartManagement;
         parent::__construct($context);
     }
 
@@ -83,7 +91,7 @@ class IyzicoCheckoutForm extends Action
             'rand' => uniqid(),
             'customerId' => 0,
             'customerCardUserKey' => '',
-            'baseUrl' => $this->_scopeConfig->getValue('payment/iyzipay/sandbox') ?  : 'https://api.iyzipay.com',
+            'baseUrl' => $this->_scopeConfig->getValue('payment/iyzipay/sandbox') ? 'https://sandbox-api.iyzipay.com' : 'https://api.iyzipay.com',
             'apiKey' => $this->_scopeConfig->getValue('payment/iyzipay/api_key'),
             'secretKey' => $this->_scopeConfig->getValue('payment/iyzipay/secret_key'),
         ];
@@ -110,7 +118,7 @@ class IyzicoCheckoutForm extends Action
         $customerBasketId = $postData['iyziQuoteId'];
 
         # Checkout Session
-        $checkoutSession = $this->_checkout->getQuote();
+        $checkoutSession = $this->_checkoutSession->getQuote();
 
         # StoreId
         $storeId = $this->_storeManager->getStore()->getId();
@@ -155,7 +163,7 @@ class IyzicoCheckoutForm extends Action
 
         if (isset($customerMail) && isset($customerBasketId)) {
             $this->_customerSession->setEmail($customerMail);
-            $this->_checkout->setGuestQuoteId($customerBasketId);
+            $this->_checkoutSession->setGuestQuoteId($customerBasketId);
         }
 
         $iyzico = $objectHelper->createPaymentOption($checkoutSession, $defination['customerCardUserKey'], $locale, $currency, $cardId, $callBack, $magentoVersion);
@@ -174,6 +182,22 @@ class IyzicoCheckoutForm extends Action
         $requestResponse = $requestHelper->sendCheckoutFormRequest($defination['baseUrl'], $iyzicoJson, $authorization);
 
         if ($requestResponse->status == 'success') {
+
+            $token = "3023fac2-7877-4b4c-8a00-07a62ce67122";
+            $conversationId = "123456789";
+            $expire_at = "2023-12-31 23:59:59";
+
+            $this->_quote = $this->_checkoutSession->getQuote();
+            $this->_quote->setIyziCurrency($currency);
+
+            if($this->_customerSession->isLoggedIn()) {
+                $this->_cartManagement->placeOrder($this->_quote->getId());
+            } else {
+                $this->_quote->setCheckoutMethod($this->_cartManagement::METHOD_GUEST);
+                $this->_quote->setCustomerEmail($this->_customerSession->getEmail());
+                $this->_cartManagement->placeOrder($this->_quote->getId());
+            }
+
             $this->_customerSession->setIyziToken($requestResponse->token);
             $result = ['success' => true, 'url' => $requestResponse->paymentPageUrl];
         } else {
