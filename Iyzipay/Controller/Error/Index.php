@@ -6,6 +6,14 @@ use Magento\Framework\App\Action\Context;
 use Magento\Framework\View\Result\PageFactory;
 use Magento\Framework\App\Action\Action;
 
+/**
+ * Class Index
+ *
+ * This class is used to display error messages in the frontend.
+ *
+ * @package Iyzico\Iyzipay\Controller\Error
+ * @extends Action
+ */
 class Index extends Action
 {
     protected $resultPageFactory;
