@@ -28,6 +28,7 @@ use Iyzico\Iyzipay\Helper\PkiStringBuilder;
 use Iyzico\Iyzipay\Helper\PriceHelper;
 use Iyzico\Iyzipay\Helper\RequestHelper;
 use Iyzico\Iyzipay\Helper\StringHelper;
+use Iyzico\Iyzipay\Logger\IyziLogger;
 use Iyzico\Iyzipay\Model\IyziCardFactory;
 use Magento\Checkout\Model\Session as CheckoutSession;
 use Magento\Customer\Model\Session as CustomerSession;
@@ -56,6 +57,7 @@ class IyzicoCheckoutForm extends Action
     protected JsonFactory $_resultJsonFactory;
     protected Quote $_quote;
     protected CartManagementInterface $_cartManagement;
+    protected IyziLogger $_iyziLogger;
 
     public function __construct(
         Context $context,
@@ -69,6 +71,7 @@ class IyzicoCheckoutForm extends Action
         JsonFactory $resultJsonFactory,
         Quote $quote,
         CartManagementInterface $cartManagement,
+        IyziLogger $iyziLogger
     ) {
         $this->_context = $context;
         $this->_checkoutSession = $checkoutSession;
@@ -81,6 +84,7 @@ class IyzicoCheckoutForm extends Action
         $this->_resultJsonFactory = $resultJsonFactory;
         $this->_quote = $quote;
         $this->_cartManagement = $cartManagement;
+        $this->_iyziLogger = $iyziLogger;
         parent::__construct($context);
     }
 
@@ -123,6 +127,9 @@ class IyzicoCheckoutForm extends Action
         # StoreId
         $storeId = $this->_storeManager->getStore()->getId();
 
+        # Store Name
+        $storeName = $this->_storeManager->getStore()->getName();
+
         # Locale Code
         $locale = $this->_scopeConfig->getValue('general/locale/code', ScopeInterface::SCOPE_STORE, $storeId);
 
@@ -132,8 +139,8 @@ class IyzicoCheckoutForm extends Action
         # Call BackUrl
         $callBack = $this->_storeManager->getStore()->getBaseUrl();
 
-        # CardId
-        $cardId = $checkoutSession->getId();
+        # Cart Id
+        $cartId = $checkoutSession->getId();
 
         # Object Manager
         $objectManager = ObjectManager::getInstance();
@@ -146,6 +153,9 @@ class IyzicoCheckoutForm extends Action
 
         # Cookie SameSite
         $cookieHelper->ensureCookiesSameSite();
+
+        # Conversation Id
+        $conversationId = $this->_stringHelper->generateConversationId($storeName, $cartId);
 
         if ($this->_customerSession->isLoggedIn()) {
             $defination['customerId'] = $this->_customerSession->getCustomerId();
@@ -166,7 +176,7 @@ class IyzicoCheckoutForm extends Action
             $this->_checkoutSession->setGuestQuoteId($customerBasketId);
         }
 
-        $iyzico = $objectHelper->createPaymentOption($checkoutSession, $defination['customerCardUserKey'], $locale, $currency, $cardId, $callBack, $magentoVersion);
+        $iyzico = $objectHelper->createPaymentOption($checkoutSession, $defination['customerCardUserKey'], $locale, $conversationId, $currency, $cartId, $callBack, $magentoVersion);
 
         $iyzico->buyer = $objectHelper->createBuyerObject($checkoutSession, $customerMail);
         $iyzico->billingAddress = $objectHelper->createBillingAddressObject($checkoutSession);
@@ -178,34 +188,65 @@ class IyzicoCheckoutForm extends Action
         $authorization = $pkiStringBuilder->generateAuthorization($iyzicoPkiString, $defination['apiKey'], $defination['secretKey'], $defination['rand']);
 
         $iyzicoJson = json_encode($iyzico, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-
         $requestResponse = $requestHelper->sendCheckoutFormRequest($defination['baseUrl'], $iyzicoJson, $authorization);
 
-        if ($requestResponse->status == 'success') {
 
-            $token = "3023fac2-7877-4b4c-8a00-07a62ce67122";
-            $conversationId = "123456789";
-            $expire_at = "2023-12-31 23:59:59";
+        if (isset($requestResponse->status) && $requestResponse->status == 'success') {
 
             $this->_quote = $this->_checkoutSession->getQuote();
             $this->_quote->setIyziCurrency($currency);
 
-            if($this->_customerSession->isLoggedIn()) {
-                $this->_cartManagement->placeOrder($this->_quote->getId());
+            if ($this->_customerSession->isLoggedIn()) {
+                $magentoOrderId = $this->_cartManagement->placeOrder($this->_quote->getId());
             } else {
                 $this->_quote->setCheckoutMethod($this->_cartManagement::METHOD_GUEST);
                 $this->_quote->setCustomerEmail($this->_customerSession->getEmail());
-                $this->_cartManagement->placeOrder($this->_quote->getId());
+                $magentoOrderId = $this->_cartManagement->placeOrder($this->_quote->getId());
+            }
+
+            $iyzicoOrderJob = $this->_objectManager->create('Iyzico\Iyzipay\Model\IyziOrderJob');
+
+            $iyzicoOrderJob->setData([
+                'magento_order_id' => $magentoOrderId,
+                'iyzico_payment_token' => $requestResponse->token,
+                'iyzico_conversationId' => $requestResponse->conversationId,
+                'expire_at' => date('Y-m-d H:i:s', strtotime('+1 day')),
+            ]);
+
+            try {
+                $iyzicoOrderJob->save();
+            } catch (\Exception $e) {
+                $this->_iyziLogger->critical($e->getMessage());
             }
 
             $this->_customerSession->setIyziToken($requestResponse->token);
             $result = ['success' => true, 'url' => $requestResponse->paymentPageUrl];
-        } else {
+        }
+
+
+        if (isset($requestResponse->errorCode)) {
             $result = [
                 'success' => false,
                 'redirect' => 'checkout/error',
                 'errorCode' => $requestResponse->errorCode,
                 'errorMessage' => $requestResponse->errorMessage
+            ];
+        }
+
+        if ($requestResponse === null) {
+            $this->_iyziLogger->critical(
+                "requestResponse is NULL",
+                [
+                    'fileName' => __FILE__,
+                    'lineNumber' => __LINE__
+                ],
+            );
+
+            $result = [
+                'success' => false,
+                'redirect' => 'checkout/error',
+                'errorCode' => 'IYZICO_CHECKOUT_FORM_REQUEST_NULL',
+                'errorMessage' => 'Check the Logs for more information. <br /> Contact: destek@iyzico.com'
             ];
         }
 
