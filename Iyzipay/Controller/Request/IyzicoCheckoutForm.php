@@ -192,11 +192,26 @@ class IyzicoCheckoutForm extends Action
 
 
         if (isset($requestResponse->status) && $requestResponse->status == 'success') {
-            $this->processSuccessfulResponse($requestResponse, $currency);
+            $result = $this->processSuccessfulResponse($requestResponse, $currency);
         } elseif (isset($requestResponse->errorCode)) {
             $result = $this->processErrorResponse($requestResponse);
         } elseif ($requestResponse === null) {
             $result = $this->processNullResponse();
+        }
+
+        if ($result === null || !is_array($result)) {
+
+            $this->_iyziLogger->critical(
+                "result must be an array.",
+                ['fileName' => __FILE__, 'lineNumber' => __LINE__]
+            );
+
+            $result = [
+                'success' => false,
+                'redirect' => 'checkout/error',
+                'errorCode' => '0',
+                'errorMessage' => 'Check the Logs for more information.'
+            ];
         }
 
         $resultJson = $this->_resultJsonFactory->create();
