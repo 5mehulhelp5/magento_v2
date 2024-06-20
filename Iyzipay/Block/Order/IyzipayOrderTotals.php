@@ -47,23 +47,27 @@ class IyzipayOrderTotals extends Template
      * Associated array of totals
      * array($totalCode => $totalObject)
      *
-     * @var array
+     * @var array $_totals
      */
     protected array $_totals;
 
     /**
-     * @var Order|null
+     * Order Object
+     *
+     * @var Order|null $_order
      */
     protected ?Order $_order = null;
 
     /**
      * Core registry object
      *
-     * @var Registry|null
+     * @var Registry|null $_coreRegistry
      */
     protected ?Registry $_coreRegistry = null;
 
     /**
+     * IyzipayOrderTotals Constructor
+     *
      * @param Context $context
      * @param Registry $registry
      * @param array $data
@@ -210,9 +214,9 @@ class IyzipayOrderTotals extends Template
         if ($area === null) {
             $totals = $this->_totals;
         } else {
-            $area = (string)$area;
+            $area = (string) $area;
             foreach ($this->_totals as $total) {
-                $totalArea = (string)$total->getArea();
+                $totalArea = (string) $total->getArea();
                 if ($totalArea == $area) {
                     $totals[] = $total;
                 }
@@ -282,7 +286,7 @@ class IyzipayOrderTotals extends Template
         }
         return parent::_beforeToHtml();
     }
-    
+
     /**
      * Initialize order totals array
      *
@@ -293,7 +297,7 @@ class IyzipayOrderTotals extends Template
         $source = $this->getSource();
 
         $this->_totals = [];
-        if ((double)$this->getSource()->getInstallmentFee() != 0) {
+        if ((double) $this->getSource()->getInstallmentFee() != 0) {
             $this->_totals['installment_fee'] = new DataObject(
                 [
                     'code' => 'installment_fee',
@@ -312,7 +316,7 @@ class IyzipayOrderTotals extends Template
         // Kargo ücreti ekleme
         $this->addShippingTotal($source);
 
-        if ((double)$this->getSource()->getDiscountAmount() != 0) {
+        if ((double) $this->getSource()->getDiscountAmount() != 0) {
             if ($this->getSource()->getDiscountDescription()) {
                 $discountLabel = __('Discount (%1)', $source->getDiscountDescription());
             } else {

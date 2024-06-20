@@ -37,7 +37,7 @@ class InstallSchema implements InstallSchemaInterface
             $this->createIyzicoOrderTable($setup);
         }
 
-        if (!$setup->tableExists('iyzico_order_job')){
+        if (!$setup->tableExists('iyzico_order_job')) {
             $this->createIyzicoOrderJobTable($setup);
         }
 
@@ -179,14 +179,14 @@ class InstallSchema implements InstallSchemaInterface
             ->addColumn(
                 'iyzico_payment_token',
                 Table::TYPE_TEXT,
-                null,
+                255, // Maksimum uzunluk belirtmek iyidir
                 ['nullable' => false],
                 'iyzico Payment Token'
             )
             ->addColumn(
                 'iyzico_conversationId',
                 Table::TYPE_TEXT,
-                null,
+                255, // Maksimum uzunluk belirtmek iyidir
                 ['nullable' => false],
                 'iyzico Payment Conversation Id'
             )
@@ -196,6 +196,20 @@ class InstallSchema implements InstallSchemaInterface
                 null,
                 ['nullable' => false],
                 'Payment Expire At'
+            )
+            ->addIndex(
+                $setup->getIdxName(
+                    'iyzico_order_job',
+                    ['iyzico_payment_token']
+                ),
+                ['iyzico_payment_token']
+            )
+            ->addIndex(
+                $setup->getIdxName(
+                    'iyzico_order_job',
+                    ['iyzico_conversationId']
+                ),
+                ['iyzico_conversationId']
             )
             ->setComment('iyzico Order Job List');
         $setup->getConnection()->createTable($table);

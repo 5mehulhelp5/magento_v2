@@ -54,14 +54,11 @@ class StringHelper
     /**
      * Generate Conversation Id
      *
-     * @param string $storeName
      * @param int $cartId
-     *
      * @return string
      */
-    public function generateConversationId(string $storeName, int $cartId): string
+    public function generateConversationId(int $cartId): string
     {
-        $storeName = preg_replace('/[^A-Za-z0-9]/', '', $storeName);
-        return $storeName . $cartId . '_' . time();
+        return 'CI' . $cartId . 'T' . time();
     }
 }

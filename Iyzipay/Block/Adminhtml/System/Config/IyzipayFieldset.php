@@ -58,13 +58,12 @@ class IyzipayFieldset extends Fieldset
      * @param array $data
      */
     public function __construct(
-        Context               $context,
-        Session               $authSession,
-        Js                    $jsHelper,
+        Context $context,
+        Session $authSession,
+        Js $jsHelper,
         StoreManagerInterface $storeManager,
-        array                 $data = []
-    )
-    {
+        array $data = []
+    ) {
         $this->storeManager = $storeManager;
         parent::__construct($context, $authSession, $jsHelper, $data);
     }
@@ -86,13 +85,12 @@ class IyzipayFieldset extends Fieldset
 
         $html .= '</div>';
         $html .= '<input id="' . $element->getHtmlId() . '-state" name="config_state[' .
-            $element->getId() . ']" type="hidden" value="' . (int)$this->_isCollapseState($element) . '" />';
+            $element->getId() . ']" type="hidden" value="' . (int) $this->_isCollapseState($element) . '" />';
         $html .= '<fieldset class="config admin__collapsible-block" id="' . $element->getHtmlId() . '" style="position: relative;">';
         $html .= '<legend>' . $element->getLegend() . '</legend>';
 
         $html .= $this->_getHeaderCommentHtml($element);
 
-        // Field label column
         $html .= '<table cellspacing="0" class="form-list"><colgroup class="label" /><colgroup class="value" />';
         if ($this->getRequest()->getParam('website') || $this->getRequest()->getParam('store')) {
             $html .= '<colgroup class="use-default" />';

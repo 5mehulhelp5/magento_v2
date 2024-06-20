@@ -22,6 +22,7 @@
 
 namespace Iyzico\Iyzipay\Controller\Request;
 
+use Exception;
 use Iyzico\Iyzipay\Helper\CookieHelper;
 use Iyzico\Iyzipay\Helper\ObjectHelper;
 use Iyzico\Iyzipay\Helper\PkiStringBuilder;
@@ -36,11 +37,16 @@ use Magento\Framework\App\Action\Action;
 use Magento\Framework\App\Action\Context;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\App\ObjectManager;
+use Magento\Framework\Controller\Result\Json;
+use Magento\Framework\Controller\Result\JsonFactory;
+use Magento\Framework\Exception\CouldNotSaveException;
+use Magento\Framework\Exception\LocalizedException;
+use Magento\Framework\Exception\NoSuchEntityException;
+use Magento\Quote\Api\CartManagementInterface;
+use Magento\Quote\Model\Quote;
 use Magento\Store\Model\ScopeInterface;
 use Magento\Store\Model\StoreManagerInterface;
-use Magento\Framework\Controller\Result\JsonFactory;
-use Magento\Quote\Model\Quote;
-use Magento\Quote\Api\CartManagementInterface;
+use Magento\Sales\Api\OrderRepositoryInterface;
 
 
 class IyzicoCheckoutForm extends Action
@@ -58,19 +64,22 @@ class IyzicoCheckoutForm extends Action
     protected Quote $_quote;
     protected CartManagementInterface $_cartManagement;
     protected IyziLogger $_iyziLogger;
+    protected OrderRepositoryInterface $_orderRepository;
 
-    public function __construct(
+    public function __construct
+    (
         Context $context,
         CheckoutSession $checkoutSession,
         CustomerSession $customerSession,
         ScopeConfigInterface $scopeConfig,
         StoreManagerInterface $storeManager,
         IyziCardFactory $iyziCardFactory,
+        CartManagementInterface $cartManagement,
+        OrderRepositoryInterface $orderRepository,
         StringHelper $stringHelper,
         PriceHelper $priceHelper,
         JsonFactory $resultJsonFactory,
         Quote $quote,
-        CartManagementInterface $cartManagement,
         IyziLogger $iyziLogger
     ) {
         $this->_context = $context;
@@ -84,105 +93,64 @@ class IyzicoCheckoutForm extends Action
         $this->_resultJsonFactory = $resultJsonFactory;
         $this->_quote = $quote;
         $this->_cartManagement = $cartManagement;
+        $this->_orderRepository = $orderRepository;
         $this->_iyziLogger = $iyziLogger;
         parent::__construct($context);
     }
 
+    /**
+     * Execute
+     *
+     * This function is responsible for executing the payment request.
+     *
+     * @throws NoSuchEntityException
+     * @throws LocalizedException
+     */
     public function execute()
     {
+        return $this->processPaymentRequest();
+    }
 
-        $defination = [
-            'rand' => uniqid(),
-            'customerId' => 0,
-            'customerCardUserKey' => '',
-            'baseUrl' => $this->_scopeConfig->getValue('payment/iyzipay/sandbox') ? 'https://sandbox-api.iyzipay.com' : 'https://api.iyzipay.com',
-            'apiKey' => $this->_scopeConfig->getValue('payment/iyzipay/api_key'),
-            'secretKey' => $this->_scopeConfig->getValue('payment/iyzipay/secret_key'),
-        ];
+    /**
+     * Process Payment Request
+     *
+     * This function is responsible for processing the payment request.
+     *
+     * @return Json
+     * @throws LocalizedException
+     * @throws NoSuchEntityException
+     */
+    private function processPaymentRequest()
+    {
+        $defination = $this->getPaymentDefinition();
 
-        # Object Helper
-        $objectHelper = new ObjectHelper($this->_stringHelper, $this->_priceHelper);
+        $objectHelper = $this->getObjectHelper();
+        $pkiStringBuilder = $this->getPkiStringBuilder();
+        $requestHelper = $this->getRequestHelper();
+        $cookieHelper = $this->getCookieHelper();
 
-        # Pki String Builder
-        $pkiStringBuilder = new PkiStringBuilder();
-
-        # Request Helper
-        $requestHelper = new RequestHelper();
-
-        # Cookie Helper
-        $cookieHelper = new CookieHelper();
-
-        # Request Data
         $postData = $this->getRequest()->getPostValue();
-
-        # Request Mail Data
         $customerMail = $postData['iyziQuoteEmail'];
-
-        # Request BasketId Data
         $customerBasketId = $postData['iyziQuoteId'];
-
-        # Checkout Session
         $checkoutSession = $this->_checkoutSession->getQuote();
-
-        # StoreId
         $storeId = $this->_storeManager->getStore()->getId();
-
-        # Store Name
-        $storeName = $this->_storeManager->getStore()->getName();
-
-        # Locale Code
-        $locale = $this->_scopeConfig->getValue('general/locale/code', ScopeInterface::SCOPE_STORE, $storeId);
-
-        # Currency Code
-        $currency = $this->_storeManager->getStore()->getCurrentCurrency()->getCode();
-
-        # Call BackUrl
-        $callBack = $this->_storeManager->getStore()->getBaseUrl();
-
-        # Cart Id
+        $locale = $this->getLocale($storeId);
+        $currency = $this->getCurrency();
+        $callBack = $this->getCallbackUrl();
         $cartId = $checkoutSession->getId();
+        $magentoVersion = $this->getMagentoVersion();
 
-        # Object Manager
-        $objectManager = ObjectManager::getInstance();
-
-        # Product Meta Data
-        $productMetaData = $objectManager->get('Magento\Framework\App\ProductMetadataInterface');
-
-        # Magento Version
-        $magentoVersion = $productMetaData->getVersion();
-
-        # Cookie SameSite
         $cookieHelper->ensureCookiesSameSite();
+        $conversationId = $this->generateConversationId($cartId);
 
-        # Conversation Id
-        $conversationId = $this->_stringHelper->generateConversationId($storeName, $cartId);
-
-        if ($this->_customerSession->isLoggedIn()) {
-            $defination['customerId'] = $this->_customerSession->getCustomerId();
-        }
-
-        if ($defination['customerId']) {
-            $iyziCardFind = $this->_iyziCardFactory->create()->getCollection()
-                ->addFieldToFilter('customer_id', $defination['customerId'])
-                ->addFieldToFilter('api_key', $defination['apiKey'])
-                ->addFieldToSelect('card_user_key');
-
-            $iyziCardFind = $iyziCardFind->getData();
-            $defination['customerCardUserKey'] = !empty($iyziCardFind[0]['card_user_key']) ? $iyziCardFind[0]['card_user_key'] : '';
-        }
+        $defination['customerId'] = $this->getCustomerId();
+        $defination['customerCardUserKey'] = $this->getCustomerCardUserKey($defination['customerId'], $defination['apiKey']);
 
         if (isset($customerMail) && isset($customerBasketId)) {
-            $this->_customerSession->setEmail($customerMail);
-            $this->_checkoutSession->setGuestQuoteId($customerBasketId);
+            $this->storeSessionData($customerMail, $customerBasketId);
         }
 
-        $iyzico = $objectHelper->createPaymentOption($checkoutSession, $defination['customerCardUserKey'], $locale, $conversationId, $currency, $cartId, $callBack, $magentoVersion);
-
-        $iyzico->buyer = $objectHelper->createBuyerObject($checkoutSession, $customerMail);
-        $iyzico->billingAddress = $objectHelper->createBillingAddressObject($checkoutSession);
-        $iyzico->shippingAddress = $objectHelper->createShippingAddressObject($checkoutSession);
-        $iyzico->basketItems = $objectHelper->createBasketItems($checkoutSession);
-
+        $iyzico = $this->createPaymentOption($objectHelper, $checkoutSession, $defination['customerCardUserKey'], $locale, $conversationId, $currency, $cartId, $callBack, $magentoVersion);
         $orderObject = $pkiStringBuilder->sortFormObject($iyzico);
         $iyzicoPkiString = $pkiStringBuilder->generatePkiString($orderObject);
         $authorization = $pkiStringBuilder->generateAuthorization($iyzicoPkiString, $defination['apiKey'], $defination['secretKey'], $defination['rand']);
@@ -190,35 +158,256 @@ class IyzicoCheckoutForm extends Action
         $iyzicoJson = json_encode($iyzico, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         $requestResponse = $requestHelper->sendCheckoutFormRequest($defination['baseUrl'], $iyzicoJson, $authorization);
 
+        $result = $this->handleRequestResponse($requestResponse, $currency);
 
-        if (isset($requestResponse->status) && $requestResponse->status == 'success') {
-            $result = $this->processSuccessfulResponse($requestResponse, $currency);
-        } elseif (isset($requestResponse->errorCode)) {
-            $result = $this->processErrorResponse($requestResponse);
-        } elseif ($requestResponse === null) {
-            $result = $this->processNullResponse();
-        }
-
-        if ($result === null || !is_array($result)) {
-
-            $this->_iyziLogger->critical(
-                "result must be an array.",
-                ['fileName' => __FILE__, 'lineNumber' => __LINE__]
-            );
-
-            $result = [
-                'success' => false,
-                'redirect' => 'checkout/error',
-                'errorCode' => '0',
-                'errorMessage' => 'Check the Logs for more information.'
-            ];
-        }
-
-        $resultJson = $this->_resultJsonFactory->create();
-        return $resultJson->setData($result);
-
+        return $this->createJsonResult($result);
     }
 
+    /**
+     * Get Payment Definition
+     *
+     * This function is responsible for getting the payment definition.
+     *
+     * @return array
+     */
+    private function getPaymentDefinition()
+    {
+        return [
+            'rand' => uniqid(),
+            'customerId' => 0,
+            'customerCardUserKey' => '',
+            'baseUrl' => $this->_scopeConfig->getValue('payment/iyzipay/sandbox') ? 'https://sandbox-api.iyzipay.com' : 'https://api.iyzipay.com',
+            'apiKey' => $this->_scopeConfig->getValue('payment/iyzipay/api_key'),
+            'secretKey' => $this->_scopeConfig->getValue('payment/iyzipay/secret_key'),
+        ];
+    }
+
+    /**
+     * Get Object Helper
+     *
+     * This function is responsible for getting the object helper.
+     *
+     * @return ObjectHelper
+     */
+    private function getObjectHelper()
+    {
+        return new ObjectHelper($this->_stringHelper, $this->_priceHelper);
+    }
+
+    /**
+     * Get Pki String Builder
+     *
+     * This function is responsible for getting the pki string builder.
+     *
+     * @return PkiStringBuilder
+     */
+    private function getPkiStringBuilder()
+    {
+        return new PkiStringBuilder();
+    }
+
+    /**
+     * Get Request Helper
+     *
+     * This function is responsible for getting the request helper.
+     *
+     * @return RequestHelper
+     */
+    private function getRequestHelper()
+    {
+        return new RequestHelper();
+    }
+
+    /**
+     * Get Cookie Helper
+     *
+     * This function is responsible for getting the cookie helper.
+     *
+     * @return CookieHelper
+     */
+    private function getCookieHelper()
+    {
+        return new CookieHelper();
+    }
+
+    /**
+     * Get Locale
+     *
+     * This function is responsible for getting the locale.
+     *
+     * @param int $storeId
+     * @return string
+     */
+    private function getLocale($storeId)
+    {
+        return $this->_scopeConfig->getValue('general/locale/code', ScopeInterface::SCOPE_STORE, $storeId);
+    }
+
+    /**
+     * Get Currency
+     *
+     * This function is responsible for getting the currency.
+     *
+     * @throws NoSuchEntityException
+     * @throws LocalizedException
+     */
+    private function getCurrency()
+    {
+        return $this->_storeManager->getStore()->getCurrentCurrency()->getCode();
+    }
+
+    /**
+     * Get Callback Url
+     *
+     * This function is responsible for getting the callback url.
+     *
+     * @throws NoSuchEntityException
+     */
+    private function getCallbackUrl()
+    {
+        return $this->_storeManager->getStore()->getBaseUrl();
+    }
+
+    /**
+     * Get Magento Version
+     *
+     * This function is responsible for getting the magento version.
+     */
+    private function getMagentoVersion()
+    {
+        $objectManager = ObjectManager::getInstance();
+        $productMetaData = $objectManager->get('Magento\Framework\App\ProductMetadataInterface');
+        return $productMetaData->getVersion();
+    }
+
+    /**
+     * Generate Conversation Id
+     *
+     * This function is responsible for generating the conversation id.
+     *
+     * @param $cartId
+     * @return string
+     */
+    private function generateConversationId($cartId)
+    {
+        return $this->_stringHelper->generateConversationId($cartId);
+    }
+
+    /**
+     * Handle Request Response
+     *
+     * This function is responsible for handling the request response.
+     *
+     * @return int|null
+     */
+    private function getCustomerId()
+    {
+        return $this->_customerSession->isLoggedIn() ? $this->_customerSession->getCustomerId() : 0;
+    }
+
+    /**
+     * Get Customer Card User Key
+     *
+     * This function is responsible for getting the customer card user key.
+     *
+     * @param $customerId
+     * @param $apiKey
+     * @return string
+     */
+    private function getCustomerCardUserKey($customerId, $apiKey)
+    {
+        if ($customerId) {
+            $iyziCardFind = $this->_iyziCardFactory->create()->getCollection()
+                ->addFieldToFilter('customer_id', $customerId)
+                ->addFieldToFilter('api_key', $apiKey)
+                ->addFieldToSelect('card_user_key');
+            $iyziCardFind = $iyziCardFind->getData();
+            return !empty($iyziCardFind[0]['card_user_key']) ? $iyziCardFind[0]['card_user_key'] : '';
+        }
+        return '';
+    }
+
+    /**
+     * Store Session Data
+     *
+     * This function is responsible for storing the session data.
+     *
+     * @param $customerMail
+     * @param $customerBasketId
+     * @return void
+     */
+    private function storeSessionData($customerMail, $customerBasketId)
+    {
+        $this->_customerSession->setEmail($customerMail);
+        $this->_checkoutSession->setGuestQuoteId($customerBasketId);
+    }
+
+    /**
+     * Create Payment Option
+     *
+     * This function is responsible for creating the payment option.
+     *
+     * @param $objectHelper
+     * @param $checkoutSession
+     * @param $customerCardUserKey
+     * @param $locale
+     * @param $conversationId
+     * @param $currency
+     * @param $cartId
+     * @param $callBack
+     * @param $magentoVersion
+     */
+    private function createPaymentOption($objectHelper, $checkoutSession, $customerCardUserKey, $locale, $conversationId, $currency, $cartId, $callBack, $magentoVersion)
+    {
+        $iyzico = $objectHelper->createPaymentOption($checkoutSession, $customerCardUserKey, $locale, $conversationId, $currency, $cartId, $callBack, $magentoVersion);
+        $iyzico->buyer = $objectHelper->createBuyerObject($checkoutSession, $this->_customerSession->getEmail());
+        $iyzico->billingAddress = $objectHelper->createBillingAddressObject($checkoutSession);
+        $iyzico->shippingAddress = $objectHelper->createShippingAddressObject($checkoutSession);
+        $iyzico->basketItems = $objectHelper->createBasketItems($checkoutSession);
+        return $iyzico;
+    }
+
+    /**
+     * Handle Request Response
+     *
+     * This function is responsible for handling the request response.
+     *
+     * @param $requestResponse
+     * @param $currency
+     * @return array
+     * @throws CouldNotSaveException
+     * @throws LocalizedException
+     * @throws NoSuchEntityException
+     * @throws Exception
+     */
+    private function handleRequestResponse($requestResponse, $currency)
+    {
+        if (isset($requestResponse->status) && $requestResponse->status == 'success') {
+            return $this->processSuccessfulResponse($requestResponse, $currency);
+        } elseif (isset($requestResponse->errorCode)) {
+            return $this->processErrorResponse($requestResponse);
+        } elseif ($requestResponse === null) {
+            return $this->processNullResponse();
+        }
+
+        $this->_iyziLogger->critical("result must be an array.", ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+        return [
+            'success' => false,
+            'redirect' => 'checkout/error',
+            'errorCode' => '0',
+            'errorMessage' => 'Check the Logs for more information.'
+        ];
+    }
+
+    /**
+     * Process Successful Response
+     *
+     * This function is responsible for processing the successful response.
+     *
+     * @throws NoSuchEntityException
+     * @throws CouldNotSaveException
+     * @throws LocalizedException
+     */
     private function processSuccessfulResponse($requestResponse, $currency)
     {
         $this->_quote = $this->_checkoutSession->getQuote();
@@ -226,24 +415,53 @@ class IyzicoCheckoutForm extends Action
 
         $magentoOrderId = $this->placeOrder();
 
-        $this->createIyziOrderJob($requestResponse, $magentoOrderId);
+        $this->saveIyziOrderTable($requestResponse, $magentoOrderId);
 
         $this->_customerSession->setIyziToken($requestResponse->token);
         return ['success' => true, 'url' => $requestResponse->paymentPageUrl];
     }
 
+    /**
+     * Place Order
+     *
+     * This function is responsible for placing the order and setting the status to pending_payment.
+     *
+     * @throws CouldNotSaveException
+     */
     private function placeOrder()
     {
         if ($this->_customerSession->isLoggedIn()) {
-            return $this->_cartManagement->placeOrder($this->_quote->getId());
+            $orderId = $this->_cartManagement->placeOrder($this->_quote->getId());
+        } else {
+            $this->_quote->setCheckoutMethod($this->_cartManagement::METHOD_GUEST);
+            $this->_quote->setCustomerEmail($this->_customerSession->getEmail());
+            $orderId = $this->_cartManagement->placeOrder($this->_quote->getId());
         }
 
-        $this->_quote->setCheckoutMethod($this->_cartManagement::METHOD_GUEST);
-        $this->_quote->setCustomerEmail($this->_customerSession->getEmail());
-        return $this->_cartManagement->placeOrder($this->_quote->getId());
+        // Load the order by its ID
+        $order = $this->_orderRepository->get($orderId);
+
+        // Set the status to pending_payment
+        $order->setState(\Magento\Sales\Model\Order::STATE_PENDING_PAYMENT)
+            ->setStatus('pending_payment');
+
+        // Save the order
+        $this->_orderRepository->save($order);
+
+        return $orderId;
     }
 
-    private function createIyziOrderJob($requestResponse, $magentoOrderId)
+    /**
+     * Save Iyzi Order Table
+     *
+     * This function is responsible for saving the iyzi order table.
+     *
+     * @param $requestResponse
+     * @param $magentoOrderId
+     *
+     * @throws CouldNotSaveException
+     */
+    private function saveIyziOrderTable($requestResponse, $magentoOrderId)
     {
         $iyzicoOrderJob = $this->_objectManager->create('Iyzico\Iyzipay\Model\IyziOrderJob');
 
@@ -256,11 +474,19 @@ class IyzicoCheckoutForm extends Action
 
         try {
             $iyzicoOrderJob->save();
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             $this->_iyziLogger->critical($e->getMessage());
         }
     }
 
+    /**
+     * Process Error Response
+     *
+     * This function is responsible for processing the error response.
+     *
+     * @param $requestResponse
+     * @return array
+     */
     private function processErrorResponse($requestResponse)
     {
         $this->_iyziLogger->critical(
@@ -276,6 +502,13 @@ class IyzicoCheckoutForm extends Action
         ];
     }
 
+    /**
+     * Process Null Response
+     *
+     * This function is responsible for processing the null response.
+     *
+     * @return array
+     */
     private function processNullResponse()
     {
         $this->_iyziLogger->critical(
@@ -291,6 +524,18 @@ class IyzicoCheckoutForm extends Action
         ];
     }
 
-
+    /**
+     * Create Json Result
+     *
+     * This function is responsible for creating the json result.
+     *
+     * @param $result
+     * @return Json
+     */
+    private function createJsonResult($result)
+    {
+        $resultJson = $this->_resultJsonFactory->create();
+        return $resultJson->setData($result);
+    }
 
 }

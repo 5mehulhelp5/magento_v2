@@ -36,18 +36,21 @@ use Magento\Framework\View\Element\Template\Context;
  */
 class OverlayScript extends Template
 {
-    protected ScopeConfigInterface $scopeConfig;
+    /**
+     * @var $_scopeConfig
+     */
+    protected $_scopeConfig;
 
     public function __construct(Context $context, ScopeConfigInterface $scopeConfig)
     {
         parent::__construct($context);
-        $this->scopeConfig = $scopeConfig;
+        $this->_scopeConfig = $scopeConfig;
     }
 
     public function render(): ?string
     {
-        $position = $this->scopeConfig->getValue('payment/iyzipay/overlayscript');
-        $protectedShopId = $this->scopeConfig->getValue('payment/iyzipay/protectedShopId');
+        $position = $this->_scopeConfig->getValue('payment/iyzipay/overlayscript');
+        $protectedShopId = $this->_scopeConfig->getValue('payment/iyzipay/protectedShopId');
 
         if ($position !== 'hidden') {
             return <<<HTML

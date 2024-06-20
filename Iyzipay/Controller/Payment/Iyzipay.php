@@ -24,15 +24,28 @@ namespace Iyzico\Iyzipay\Controller\Payment;
 use Magento\Framework\App\Action\Context;
 use Magento\Framework\View\Result\PageFactory;
 use Magento\Framework\App\Action\Action;
-use Magento\Framework\Controller\ResultInterface;
+use Magento\Framework\View\Result\Page;
 
+/**
+ * Class Iyzipay
+ *
+ * This class is used to display the payment page.
+ *
+ * @package Iyzico\Iyzipay\Controller\Payment
+ * @extends Action
+ */
 class Iyzipay extends Action
 {
 
+    /**
+     * Page Factory
+     *
+     * @var PageFactory $_resultPageFactory
+     */
     protected PageFactory $_resultPageFactory;
 
     /**
-     * Constructor
+     * Iyzipay Constructor
      *
      * @param Context  $context
      * @param PageFactory $resultPageFactory
@@ -48,7 +61,7 @@ class Iyzipay extends Action
      *
      * This method is used to display the payment page.
      *
-     * @return ResultInterface
+     * @return Page
      */
     public function execute()
     {
