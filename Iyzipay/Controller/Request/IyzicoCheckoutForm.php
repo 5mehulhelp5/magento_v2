@@ -137,11 +137,11 @@ class IyzicoCheckoutForm extends Action
         $locale = $this->getLocale($storeId);
         $currency = $this->getCurrency();
         $callBack = $this->getCallbackUrl();
-        $cartId = $checkoutSession->getId();
+        $quoteId = $checkoutSession->getId();
         $magentoVersion = $this->getMagentoVersion();
 
         $cookieHelper->ensureCookiesSameSite();
-        $conversationId = $this->generateConversationId($cartId);
+        $conversationId = $this->generateConversationId($quoteId);
 
         $defination['customerId'] = $this->getCustomerId();
         $defination['customerCardUserKey'] = $this->getCustomerCardUserKey($defination['customerId'], $defination['apiKey']);
@@ -150,7 +150,7 @@ class IyzicoCheckoutForm extends Action
             $this->storeSessionData($customerMail, $customerBasketId);
         }
 
-        $iyzico = $this->createPaymentOption($objectHelper, $checkoutSession, $defination['customerCardUserKey'], $locale, $conversationId, $currency, $cartId, $callBack, $magentoVersion);
+        $iyzico = $this->createPaymentOption($objectHelper, $checkoutSession, $defination['customerCardUserKey'], $locale, $conversationId, $currency, $quoteId, $callBack, $magentoVersion);
         $orderObject = $pkiStringBuilder->sortFormObject($iyzico);
         $iyzicoPkiString = $pkiStringBuilder->generatePkiString($orderObject);
         $authorization = $pkiStringBuilder->generateAuthorization($iyzicoPkiString, $defination['apiKey'], $defination['secretKey'], $defination['rand']);
@@ -285,12 +285,12 @@ class IyzicoCheckoutForm extends Action
      *
      * This function is responsible for generating the conversation id.
      *
-     * @param $cartId
+     * @param $quoteId
      * @return string
      */
-    private function generateConversationId($cartId)
+    private function generateConversationId($quoteId)
     {
-        return $this->_stringHelper->generateConversationId($cartId);
+        return $this->_stringHelper->generateConversationId($quoteId);
     }
 
     /**
@@ -353,13 +353,13 @@ class IyzicoCheckoutForm extends Action
      * @param $locale
      * @param $conversationId
      * @param $currency
-     * @param $cartId
+     * @param $quoteId
      * @param $callBack
      * @param $magentoVersion
      */
-    private function createPaymentOption($objectHelper, $checkoutSession, $customerCardUserKey, $locale, $conversationId, $currency, $cartId, $callBack, $magentoVersion)
+    private function createPaymentOption($objectHelper, $checkoutSession, $customerCardUserKey, $locale, $conversationId, $currency, $quoteId, $callBack, $magentoVersion)
     {
-        $iyzico = $objectHelper->createPaymentOption($checkoutSession, $customerCardUserKey, $locale, $conversationId, $currency, $cartId, $callBack, $magentoVersion);
+        $iyzico = $objectHelper->createPaymentOption($checkoutSession, $customerCardUserKey, $locale, $conversationId, $currency, $quoteId, $callBack, $magentoVersion);
         $iyzico->buyer = $objectHelper->createBuyerObject($checkoutSession, $this->_customerSession->getEmail());
         $iyzico->billingAddress = $objectHelper->createBillingAddressObject($checkoutSession);
         $iyzico->shippingAddress = $objectHelper->createShippingAddressObject($checkoutSession);
@@ -416,8 +416,6 @@ class IyzicoCheckoutForm extends Action
         $magentoOrderId = $this->placeOrder();
 
         $this->saveIyziOrderTable($requestResponse, $magentoOrderId);
-
-        $this->_customerSession->setIyziToken($requestResponse->token);
         return ['success' => true, 'url' => $requestResponse->paymentPageUrl];
     }
 

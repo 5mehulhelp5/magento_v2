@@ -98,7 +98,7 @@ class IyzipayFieldset extends Fieldset
 
         $html .= '<colgroup class="scope-label" /><colgroup class="" /><tbody>';
         $html .= '<div style="position:absolute;right: 0px;top:0px;display: flex;flex-direction: column;justify-content: center;">
-                    <img src="' . $this->getViewFileUrl('PaymentGateway::logo/payment_gateway_logo.png') . '" style="width: 180px; margin-left: auto;" /><span></span>
+                    <img src="' . $this->getViewFileUrl('Iyzico_Iyzipay::iyzico/iyzico_logo.png') . '" style="width: 180px; margin-left: auto;" /><span></span>
                 </div>';
 
         return $html;

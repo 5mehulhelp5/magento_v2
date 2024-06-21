@@ -173,20 +173,20 @@ class InstallSchema implements InstallSchemaInterface
                 'magento_order_id',
                 Table::TYPE_INTEGER,
                 null,
-                ['nullable' => false],
+                ['unsigned' => true, 'nullable' => false],
                 'Magento Order Id'
             )
             ->addColumn(
                 'iyzico_payment_token',
                 Table::TYPE_TEXT,
-                255, // Maksimum uzunluk belirtmek iyidir
+                255,
                 ['nullable' => false],
                 'iyzico Payment Token'
             )
             ->addColumn(
                 'iyzico_conversationId',
                 Table::TYPE_TEXT,
-                255, // Maksimum uzunluk belirtmek iyidir
+                255,
                 ['nullable' => false],
                 'iyzico Payment Conversation Id'
             )
@@ -210,6 +210,18 @@ class InstallSchema implements InstallSchemaInterface
                     ['iyzico_conversationId']
                 ),
                 ['iyzico_conversationId']
+            )
+            ->addForeignKey(
+                $setup->getFkName(
+                    'iyzico_order_job',
+                    'magento_order_id',
+                    'sales_order',
+                    'entity_id'
+                ),
+                'magento_order_id',
+                $setup->getTable('sales_order'),
+                'entity_id',
+                Table::ACTION_CASCADE
             )
             ->setComment('iyzico Order Job List');
         $setup->getConnection()->createTable($table);

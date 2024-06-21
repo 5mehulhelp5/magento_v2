@@ -15,7 +15,7 @@ class ObjectHelper
         $this->priceHelper = $priceHelper;
     }
 
-    public function createPaymentOption($checkoutSession, $cardUserKey, $locale, $conversationId, $currency, $cartId, $callBack, $magentoVersion): stdClass
+    public function createPaymentOption($checkoutSession, $cardUserKey, $locale, $conversationId, $currency, $quoteId, $callBack, $magentoVersion): stdClass
     {
         $object = new stdClass();
 
@@ -24,7 +24,7 @@ class ObjectHelper
         $object->price = $this->priceHelper->calculateSubtotalPrice($checkoutSession);
         $object->paidPrice = $this->priceHelper->parsePrice(round($checkoutSession->getGrandTotal(), 2));
         $object->currency = $currency;
-        $object->basketId = $cartId;
+        $object->basketId = $quoteId;
         $object->paymentGroup = 'PRODUCT';
         $object->forceThreeDS = "0";
         $object->callbackUrl = $callBack . "Iyzico_Iyzipay/response/iyzicocheckoutform";
@@ -118,7 +118,7 @@ class ObjectHelper
 
             $basketItems[$endKey] = new stdClass();
 
-            $basketItems[$endKey]->id = (string)rand();
+            $basketItems[$endKey]->id = (string) rand();
             $basketItems[$endKey]->price = $this->priceHelper->parsePrice($shipping);
             $basketItems[$endKey]->name = "Cargo";
             $basketItems[$endKey]->category1 = "Cargo";

@@ -54,11 +54,11 @@ class StringHelper
     /**
      * Generate Conversation Id
      *
-     * @param int $cartId
+     * @param int $quoteId
      * @return string
      */
-    public function generateConversationId(int $cartId): string
+    public function generateConversationId(int $quoteId): string
     {
-        return 'CI' . $cartId . 'T' . time();
+        return 'QI' . $quoteId . 'T' . time();
     }
 }

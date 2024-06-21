@@ -45,6 +45,11 @@ use Magento\Framework\Message\ManagerInterface;
 use Magento\Framework\View\Element\Template\Context as TemplateContext;
 use Magento\Quote\Api\CartManagementInterface;
 use Magento\Store\Model\StoreManagerInterface;
+use Iyzico\Iyzipay\Model\ResourceModel\IyziOrderJob\Collection as IyziOrderJobCollection;
+use Magento\Sales\Api\OrderRepositoryInterface;
+use Magento\Framework\Exception\NoSuchEntityException;
+use Magento\Sales\Api\Data\OrderInterface;
+use Iyzico\Iyzipay\Enums\ErrorCode;
 
 class IyzicoCheckoutForm extends Action implements CsrfAwareActionInterface
 {
@@ -62,6 +67,7 @@ class IyzicoCheckoutForm extends Action implements CsrfAwareActionInterface
     protected IyziLogger $_iyziLogger;
     protected ResponseObjectHelper $_responseObjectHelper;
     protected TemplateContext $_templateContext;
+    protected OrderRepositoryInterface $_orderRepository;
 
     public function __construct
     (
@@ -71,6 +77,7 @@ class IyzicoCheckoutForm extends Action implements CsrfAwareActionInterface
         ScopeConfigInterface $scopeConfig,
         StoreManagerInterface $storeManager,
         CartManagementInterface $cartManagement,
+        OrderRepositoryInterface $orderRepository,
         ManagerInterface $messageManager,
         ResultFactory $resultFactory,
         IyziCardFactory $iyziCardFactory,
@@ -85,6 +92,7 @@ class IyzicoCheckoutForm extends Action implements CsrfAwareActionInterface
         $this->_checkoutSession = $checkoutSession;
         $this->_customerSession = $customerSession;
         $this->_cartManagement = $cartManagement;
+        $this->_orderRepository = $orderRepository;
         $this->_resultRedirect = $resultFactory;
         $this->_scopeConfig = $scopeConfig;
         $this->_iyziOrderFactory = $iyziOrderFactory;
@@ -120,305 +128,52 @@ class IyzicoCheckoutForm extends Action implements CsrfAwareActionInterface
      */
     public function processPaymentResponse($webhook = null, $webhookPaymentConversationId = null, $webhookToken = null, $webhookIyziEventType = null)
     {
-        // iyzico_order_job eğer başarılıysa kaydı sil.
-        // iyzico_order_job için cron job oluşturulacak.
-        // eğer token ve conversationId ile ödeme yoksa kayıt silinecek. Örneğin 1 saat sonra silinecek. Saatlik cron job oluşturulacak.
+        // iyzico_order_job kayıtlar silinmeli.
+        // iyzico_order_job cron job ile retrive isteği atılacak. Eğer başarılı olursa kayıt silinecek. Başarısız olursa 4 saat sonra tekrar denenecek. 3 defa denedikten sonra kayıt silinecek.
+        // Taksit kodlarını incele.
+        // success page gitmiyor ona bak.
 
-        try {
+        $defination = $this->getPaymentDefinition();
 
-            $defination = $this->getPaymentDefinition();
-            $pkiStringBuilder = $this->getPkiStringBuilder();
-            $requestHelper = $this->getRequestHelper();
-            $webhookHelper = $this->getWebhookHelper();
+        $pkiStringBuilder = $this->getPkiStringBuilder();
+        $requestHelper = $this->getRequestHelper();
 
-            $postData = $this->getRequest()->getPostValue();
-            $resultRedirect = $this->_resultRedirect->create(ResultFactory::TYPE_REDIRECT);
-            
+        $resultRedirect = $this->_resultRedirect->create(ResultFactory::TYPE_REDIRECT);
 
-            if (!isset($postData['token']) && $webhook != 'webhook') {
+        $token = $this->getToken($webhook, $webhookToken, $resultRedirect);
 
-                $errorMessage = __('Token not found');
+        $iyzicoOrderJobCollection = $this->_objectManager->create(IyziOrderJobCollection::class);
+        $iyzicoOrderJob = $iyzicoOrderJobCollection->addFieldToFilter('iyzico_payment_token', $token)->getFirstItem();
 
-                /* Redirect Error */
-                $this->_messageManager->addError($errorMessage);
-                $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
-                return $resultRedirect;
+        $conversationId = $iyzicoOrderJob->getData('iyzico_conversationId');
+        $orderId = $iyzicoOrderJob->getData('magento_order_id');
+        $defination['customerId'] = $this->_customerSession->isLoggedIn() ? $this->_customerSession->getCustomerId() : 0;
 
-            }
+        $tokenDetailObject = $this->_responseObjectHelper->createTokenDetailObject($conversationId, $token);
+        $iyzicoPkiString = $pkiStringBuilder->generatePkiString($tokenDetailObject);
+        $authorization = $pkiStringBuilder->generateAuthorization($iyzicoPkiString, $defination['apiKey'], $defination['secretKey'], $defination['rand']);
+        $iyzicoJson = json_encode($tokenDetailObject, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $requestResponse = $requestHelper->sendCheckoutFormDetailRequest($defination['baseUrl'], $iyzicoJson, $authorization);
 
-            if ($webhook == 'webhook') {
-                $token = $webhookToken;
-                $conversationId = $webhookPaymentConversationId;
-            } else {
-                $token = $postData['token'];
-                $conversationId = "";
-            }
 
+        if ($webhook !== null) {
+            $this->handleWebhookResponse($requestResponse);
+        }
 
-            if ($this->_customerSession->isLoggedIn()) {
-                $defination['$customerId'] = $this->_customerSession->getCustomerId();
-            }
+        if (isset($requestResponse->errorCode)) {
+            return $this->handleErrorResponse($requestResponse, $resultRedirect);
+        }
 
-            $tokenDetailObject = $this->_responseObjectHelper->createTokenDetailObject($conversationId, $token);
-            $iyzicoPkiString = $pkiStringBuilder->generatePkiString($tokenDetailObject);
-            $authorization = $pkiStringBuilder->generateAuthorization($iyzicoPkiString, $defination['apiKey'], $defination['secretKey'], $defination['rand']);
-            $iyzicoJson = json_encode($tokenDetailObject, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-            $requestResponse = $requestHelper->sendCheckoutFormDetailRequest($defination['baseUrl'], $iyzicoJson, $authorization);
+        $processOrder = match ($webhookIyziEventType) {
+            'CREDIT_PAYMENT_INIT' => $this->processCreditPaymentInit($orderId, $requestResponse),
+            'CREDIT_PAYMENT_PENDING' => $this->processCreditPaymentPending($orderId, $requestResponse),
+            'CREDIT_PAYMENT_AUTH' => $this->processCreditPaymentAuth($orderId, $requestResponse),
+            'BANK_TRANSFER_AUTH' => $this->processBankTransferAuth($orderId, $requestResponse),
+            default => $this->processDefault($orderId, $requestResponse, $defination),
+        };
 
-
-            if ($webhook == 'webhook' && $requestResponse->status == 'failure' && $requestResponse->paymentStatus != 'SUCCESS') {
-                return $webhookHelper->webhookHttpResponse($requestResponse->errorCode . '-' . $requestResponse->errorMessage, 404);
-            }
-
-
-            $objectManager = ObjectManager::getInstance();
-            $resource = $objectManager->get('Magento\Framework\App\ResourceConnection');
-            $connection = $resource->getConnection();
-
-            if ($webhook == 'webhook' && $requestResponse->status == 'success' && $requestResponse->paymentStatus == 'SUCCESS') {
-                $tableName = $resource->getTableName('sales_order'); //gives table name with prefix
-                $sql = "Select * FROM " . $tableName . " Where quote_id = " . $requestResponse->basketId;
-                $result = $connection->fetchAll($sql);
-
-                if ($webhookIyziEventType == 'BANK_TRANSFER_AUTH' && $requestResponse->status == 'success') {
-                    $entity_id = $result[0]['entity_id'];
-                    $order = $objectManager->create('\Magento\Sales\Model\Order')->load($entity_id);
-                    $order->setState('processing');
-                    $order->setStatus('processing');
-                    $historyComment = 'Bank Transfer success.';
-                    $order->addStatusHistoryComment($historyComment);
-                    $order->save();
-                    return 'ok';
-                }
-                if (!empty($result)) {
-                    return $webhookHelper->webhookHttpResponse("Order Exist - Sipariş zaten var.", 200);
-                }
-            }
-
-
-            $requestResponse->paymentId = isset($requestResponse->paymentId) ? (int) $requestResponse->paymentId : '';
-            $requestResponse->paidPrice = isset($requestResponse->paidPrice) ? (float) $requestResponse->paidPrice : '';
-            $requestResponse->basketId = isset($requestResponse->basketId) ? (int) $requestResponse->basketId : '';
-
-            /* webhook order update credit */
-            if ($webhook == 'webhook') {
-
-                $tableName = $resource->getTableName('sales_order');
-                $sql = "Select * FROM " . $tableName . " Where quote_id = " . $requestResponse->basketId;
-                $result = $connection->fetchAll($sql);
-                $entity_id = $result[0]['entity_id'];
-                $order = $objectManager->create('\Magento\Sales\Model\Order')->load($entity_id);
-
-
-                if ($webhookIyziEventType == 'CREDIT_PAYMENT_PENDING' && $requestResponse->paymentStatus == 'PENDING_CREDIT') {
-                    $order->setState('pending');
-                    $order->setStatus('pending');
-                    $historyComment = 'Alışveriş kredisi başvurusu sürecindedir.';
-                    $order->addStatusHistoryComment($historyComment);
-                    $order->save();
-                    return 'ok';
-
-                }
-                if ($webhookIyziEventType == 'CREDIT_PAYMENT_AUTH' && $requestResponse->status == 'success') {
-                    $order->setState('processing');
-                    $order->setStatus('processing');
-                    $historyComment = 'Alışveriş kredisi işlemi başarıyla tamamlandı.';
-                    $order->addStatusHistoryComment($historyComment);
-                    $order->save();
-                    return 'ok';
-
-                }
-                if ($webhookIyziEventType == 'CREDIT_PAYMENT_INIT' && $requestResponse->status == 'INIT_CREDIT') {
-                    $order->setState('pending');
-                    $order->setStatus('pending');
-                    $historyComment = 'Alışveriş kredisi işlemi başlatıldı.';
-                    $order->addStatusHistoryComment($historyComment);
-                    $order->save();
-                    return 'ok';
-
-                }
-                if ($webhookIyziEventType == 'CREDIT_PAYMENT_AUTH' && $requestResponse->status == 'FAILURE') {
-                    $order->setState('canceled');
-                    $order->setStatus('canceled');
-                    $historyComment = 'Alışveriş kredisi işlemi başarısız.';
-                    $order->addStatusHistoryComment($historyComment);
-                    $order->save();
-                    return 'ok';
-
-                }
-
-            }
-
-
-            if ($webhook != 'webhook' && $requestResponse->paymentStatus == 'PENDING_CREDIT' && $requestResponse->status == 'success') {
-
-                $status = 'PENDING_CREDIT';
-            } else {
-                $status = $requestResponse->status;
-            }
-
-            /* Insert Order Log */
-            $iyziOrderModel = $this->_iyziOrderFactory->create([
-                'payment_id' => $requestResponse->paymentId,
-                'total_amount' => $requestResponse->paidPrice,
-                'order_id' => $requestResponse->basketId,
-                'status' => $status,
-            ]);
-            $iyziOrderModel->save();
-
-
-            /*Bank Transfer */
-            if ($requestResponse->paymentStatus == 'INIT_BANK_TRANSFER' && $requestResponse->status == 'success') {
-                $this->_quote->setCheckoutMethod($this->_cartManagement::METHOD_GUEST);
-                $this->_cartManagement->placeOrder($this->_quote->getId());
-                $this->_quote->setIyzicoPaymentId($requestResponse->paymentId);
-
-                $resultRedirect->setPath('checkout/onepage/success', ['_secure' => true]);
-                return $resultRedirect;
-            }
-
-            /* credit shipping */
-            if ($webhook != 'webhook' && $requestResponse->paymentStatus == 'PENDING_CREDIT' && $requestResponse->status == 'success') {
-                $this->_quote->setCheckoutMethod($this->_cartManagement::METHOD_GUEST);
-                $this->_quote->setIyziPaymentStatus('PENDING_CREDIT');
-                $this->_quote->setIyzicoPaymentId($requestResponse->paymentId);
-                $this->_cartManagement->placeOrder($this->_quote->getId());
-                $resultRedirect->setPath('checkout/onepage/success', ['_secure' => true]);
-                return $resultRedirect;
-            }
-
-
-            /* Error Redirect Start */
-            if ($requestResponse->paymentStatus != 'SUCCESS' || $requestResponse->status != 'success') {
-
-                $errorMessage = isset($requestResponse->errorMessage) ? $requestResponse->errorMessage : 'Failed';
-
-                if ($requestResponse->status == 'success' && $requestResponse->paymentStatus == 'FAILURE') {
-                    $errorMessage = __('3D Security Error');
-
-                }
-
-
-                /* Redirect Error */
-                $this->_messageManager->addError($errorMessage);
-                $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
-                return $resultRedirect;
-
-            }
-
-
-            /* Order ID Confirmation */
-            if ($this->_quote->getId() != $requestResponse->basketId && $webhook != 'webhook') {
-
-                $errorMessage = __('Order Not Match');
-
-                /* Redirect Error */
-                $this->_messageManager->addError($errorMessage);
-                $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
-                return $resultRedirect;
-            }
-
-
-            /* Order Price Confirmation */
-            $totalPrice = $this->_priceHelper->parsePrice(round($this->_quote->getGrandTotal(), 2));
-            if ($totalPrice > $requestResponse->paidPrice) {
-                /* Cancel Payment */
-                $errorMessage = __('Order Price Not Match');
-
-                /* Redirect Error */
-                $this->_messageManager->addError($errorMessage);
-                $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
-                return $resultRedirect;
-            }
-
-
-            if ($webhook != 'webhook' && $requestResponse->paymentStatus == 'PENDING_CREDIT' && $requestResponse->status == 'success') {
-
-                $this->_quote->setIyziPaymentStatus('PENDING_CREDIT');
-                $this->_quote->setIyzicoPaymentId($requestResponse->paymentId);
-            } else {
-                $this->_quote->setIyziPaymentStatus('success');
-            }
-
-            /* Card Save */
-            if ($defination['$customerId']) {
-                if (isset($requestResponse->cardUserKey)) {
-                    $iyziCardFind = $this->_iyziCardFactory->create()->getCollection()
-                        ->addFieldToFilter('customer_id', $defination['$customerId'])
-                        ->addFieldToFilter('api_key', $defination['apiKey'])
-                        ->addFieldToSelect('card_user_key');
-
-                    $iyziCardFind = $iyziCardFind->getData();
-
-                    $defination['customerCardUserKey'] = !empty($iyziCardFind[0]['card_user_key']) ? $iyziCardFind[0]['card_user_key'] : null;
-
-                    if ($requestResponse->cardUserKey != $defination['customerCardUserKey']) {
-
-                        /* Customer Card Save */
-                        $iyziCardModel = $this->_iyziCardFactory->create([
-                            'customer_id' => $defination['$customerId'],
-                            'card_user_key' => $requestResponse->cardUserKey,
-                            'api_key' => $defination['apiKey'],
-                        ]);
-                        $iyziCardModel->save();
-                    }
-                }
-            }
-
-
-            $this->_quote->getPayment()->setMethod('iyzipay');
-            $installmentFee = 0;
-
-
-            if (isset($requestResponse->installment) && !empty($requestResponse->installment) && $requestResponse->installment > 1) {
-
-                $installmentFee = $requestResponse->paidPrice - $this->_quote->getGrandTotal();
-                $this->_quote->setInstallmentFee($installmentFee);
-                $this->_quote->setInstallmentCount($requestResponse->installment);
-
-            }
-
-
-            /* Set Payment Id */
-            $this->_quote->setIyzicoPaymentId($requestResponse->paymentId);
-
-            if ($webhook == 'webhook' && $requestResponse->status == 'success' && $requestResponse->paymentStatus == 'SUCCESS') {
-
-                try {
-                    $this->_quote->setCheckoutMethod($this->_cartManagement::METHOD_GUEST);
-                    $this->_quote->setCustomerEmail($this->_customerSession->getEmail());
-                    $this->_cartManagement->placeOrder($requestResponse->basketId);
-                    return $webhookHelper->webhookHttpResponse("Order Created by Webhook - Sipariş webhook tarafından oluşturuldu.", 200);
-                } catch (Exception $e) {
-                    return $webhookHelper->webhookHttpResponse("Order Created by Webhook - Sipariş webhook tarafından oluşturuldu.", 200);
-                }
-
-            }
-
-            if ($this->_customerSession->isLoggedIn()) {
-                /* Place Order - Login Checkout */
-                $this->_cartManagement->placeOrder($this->_quote->getId());
-
-            } else {
-
-                $this->_quote->setCheckoutMethod($this->_cartManagement::METHOD_GUEST);
-                $this->_quote->setCustomerEmail($this->_customerSession->getEmail());
-                $this->_cartManagement->placeOrder($this->_quote->getId());
-
-            }
-
-
+        if ($processOrder) {
             $resultRedirect->setPath('checkout/onepage/success', ['_secure' => true]);
-            return $resultRedirect;
-
-
-        } catch (Exception $e) {
-            if ($webhook == 'webhook') {
-                return $webhookHelper->webhookHttpResponse($requestResponse->errorCode . '-' . $requestResponse->errorMessage, 404);
-            }
-            /* Redirect Error */
-            $this->_messageManager->addError($e);
-            $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
             return $resultRedirect;
         }
 
@@ -478,5 +233,271 @@ class IyzicoCheckoutForm extends Action implements CsrfAwareActionInterface
     private function getWebhookHelper()
     {
         return new WebhookHelper($this->_templateContext);
+    }
+
+    /**
+     * Get Object Manager
+     *
+     * This function is responsible for getting the object manager.
+     *
+     * @return ObjectManager
+     */
+    private function instanceObjectManager()
+    {
+        return ObjectManager::getInstance();
+    }
+
+    /**
+     * Get Token
+     *
+     * This function is responsible for validating the token and returning the result.
+     *
+     * @param string $webhook
+     * @param string $webhookToken
+     * @param $resultRedirect
+     * @return string
+     */
+    private function getToken($webhook, $webhookToken, $resultRedirect)
+    {
+        $postData = $this->getRequest()->getPostValue();
+
+        if (!isset($postData['token']) && $webhook != 'webhook') {
+            $errorMessage = __('Token not found');
+
+            $this->_messageManager->addError($errorMessage);
+            return $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
+        }
+
+        return ($webhook == 'webhook') ? $webhookToken : $postData['token'];
+    }
+
+    /**
+     * Process Credit Payment Init
+     *
+     * This function is responsible for processing the credit payment init.
+     *
+     * @param string $orderId
+     * @param object $response
+     */
+    private function processCreditPaymentInit(string $orderId, object $response): void
+    {
+        $order = $this->findOrderById($orderId);
+        $status = $response->status;
+        $comment = __("INIT_CREDIT");
+
+
+        if ($status == 'INIT_CREDIT') {
+            $order->setState('pending');
+            $order->setStatus('pending');
+            $order->addStatusHistoryComment($comment);
+            $order->save();
+        }
+    }
+
+    /**
+     * Process Credit Payment Pending
+     *
+     * This function is responsible for processing the credit payment pending.
+     *
+     * @param string $orderId
+     * @param object $response
+     * @return void
+     */
+    private function processCreditPaymentPending(string $orderId, object $response): void
+    {
+        $order = $this->findOrderById($orderId);
+        $status = $response->paymentStatus;
+        $comment = __("CREDIT_PAYMENT_PENDING");
+
+        if ($status == 'PENDING_CREDIT') {
+            $order->setState('pending');
+            $order->setStatus('pending');
+            $order->addStatusHistoryComment($comment);
+            $order->save();
+        }
+    }
+
+    /**
+     * Process Credit Payment Auth
+     *
+     * This function is responsible for processing the credit payment auth.
+     *
+     * @param string $orderId
+     * @param object $response
+     * @return void
+     */
+    private function processCreditPaymentAuth(string $orderId, object $response): void
+    {
+        $order = $this->findOrderById($orderId);
+        $status = $response->status;
+
+        if ($status == 'success') {
+            $order->setState('processing');
+            $order->setStatus('processing');
+            $comment = __("CREDIT_PAYMENT_AUTH_SUCCESS");
+        }
+
+        if ($status == 'FAILURE') {
+            $order->setState('canceled');
+            $order->setStatus('canceled');
+            $comment = __("CREDIT_PAYMENT_AUTH_FAILURE");
+        }
+
+        $order->addStatusHistoryComment($comment);
+        $order->save();
+    }
+
+    /**
+     * Process Bank Transfer Auth
+     *
+     * This function is responsible for processing the bank transfer auth.
+     *
+     * @param string $orderId
+     * @param object $response
+     * @return void
+     */
+    private function processBankTransferAuth(string $orderId, object $response): void
+    {
+        $order = $this->findOrderById($orderId);
+        $status = $response->status;
+        $paymentStatus = $response->paymentStatus;
+        $comment = __("BANK_TRANSFER_AUTH_SUCCESS");
+
+        if ($status == 'success' && $paymentStatus == 'SUCCESS') {
+            $order->setState('processing');
+            $order->setStatus('processing');
+            $order->addStatusHistoryComment($comment);
+            $order->save();
+        }
+    }
+
+    /**
+     * Process Default
+     *
+     * This function is responsible for processing the default.
+     *
+     * @param string $orderId
+     * @param object $response
+     * @param array $defination
+     *
+     * @return bool
+     */
+    private function processDefault(string $orderId, object $response, array $defination): bool
+    {
+        $order = $this->findOrderById($orderId);
+        $paymentStatus = $response->paymentStatus;
+        $status = $response->status;
+
+        if ($paymentStatus == 'PENDING_CREDIT' && $status == 'success') {
+            $order->addStatusHistoryComment(__("PENDING_CREDIT"));
+        }
+
+        if ($paymentStatus == 'INIT_BANK_TRANSFER' && $status == 'success') {
+            $order->addStatusHistoryComment(__("INIT_BANK_TRANSFER"));
+        }
+
+        if ($paymentStatus == 'SUCCESS' && $status == 'success') {
+            $order->addStatusHistoryComment(__("SUCCESS"));
+            $order->setState('processing');
+            $order->setStatus('processing');
+        }
+
+        $order->save();
+
+        if (isset($response->cardUserKey) && $defination['customerId'] != 0) {
+            $this->saveUserCard($defination, $response);
+        }
+
+        return true;
+    }
+
+    /**
+     * Find Order By Id
+     *
+     * This function is responsible for finding the order by id.
+     *
+     * @param string $orderId
+     * @return OrderInterface|null
+     */
+    private function findOrderById(string $orderId): OrderInterface|null
+    {
+        try {
+            return $this->_orderRepository->get($orderId);
+        } catch (NoSuchEntityException $e) {
+            $this->_iyziLogger->critical("findOrderById: $orderId - Message: " . $e->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+            return null;
+        }
+    }
+
+    /**
+     * Handle Webhook Response
+     *
+     * This function is responsible for handling the webhook response.
+     *
+     * @param object $response
+     * @return void
+     */
+    private function handleWebhookResponse(object $response): void
+    {
+        $webhookHelper = $this->getWebhookHelper();
+        $status = $response->status;
+        $paymentStatus = $response->paymentStatus;
+
+        if ($status == 'failure' && $paymentStatus != 'SUCCESS') {
+            $errorCode = ErrorCode::from($response->errorCode);
+            $errorMessage = $errorCode->getErrorMessage();
+            $webhookHelper->webhookHttpResponse($response->errorCode . '-' . $errorMessage, 404);
+        }
+    }
+
+    /**
+     * Handle Error Response
+     *
+     * This function is responsible for handling the error response.
+     *
+     * @param object $response
+     * @param $resultRedirect
+     * @return mixed
+     */
+    private function handleErrorResponse(object $response, $resultRedirect): mixed
+    {
+        $errorCode = ErrorCode::from($response->errorCode);
+        $errorMessage = $errorCode->getErrorMessage();
+
+        $this->_messageManager->addError($errorMessage);
+        return $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
+    }
+
+    /**
+     * Save User Card
+     *
+     * This function is responsible for saving the user card.
+     *
+     * @param array $defination
+     * @param object $response
+     * @return void
+     */
+    private function saveUserCard(array $defination, object $response): void
+    {
+        $iyziCardFind = $this->_iyziCardFactory->create()->getCollection()
+            ->addFieldToFilter('customer_id', $defination['$customerId'])
+            ->addFieldToFilter('api_key', $defination['apiKey'])
+            ->addFieldToSelect('card_user_key');
+
+        $iyziCardFind = $iyziCardFind->getData();
+
+        $defination['customerCardUserKey'] = !empty($iyziCardFind[0]['card_user_key']) ? $iyziCardFind[0]['card_user_key'] : null;
+
+        if ($response->cardUserKey != $defination['customerCardUserKey']) {
+
+            /* Customer Card Save */
+            $iyziCardModel = $this->_iyziCardFactory->create([
+                'customer_id' => $defination['$customerId'],
+                'card_user_key' => $response->cardUserKey,
+                'api_key' => $defination['apiKey'],
+            ]);
+
+            $iyziCardModel->save();
+        }
     }
 }
