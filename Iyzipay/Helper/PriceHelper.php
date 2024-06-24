@@ -24,23 +24,28 @@ class PriceHelper
     public function parsePrice($price)
     {
         if (strpos($price, ".") === false) {
-	        return $price . ".0";
-	    }
+            return $price . ".0";
+        }
 
-	    $subStrIndex = 0;
-	    $priceReversed = strrev($price);
-	    for ($i = 0; $i < strlen($priceReversed); $i++) {
-	        if (strcmp($priceReversed[$i], "0") == 0) {
-	            $subStrIndex = $i + 1;
-	        } else if (strcmp($priceReversed[$i], ".") == 0) {
-	            $priceReversed = "0" . $priceReversed;
-	            break;
-	        } else {
-	            break;
-	        }
-	    }
+        $subStrIndex = 0;
+        $priceReversed = strrev($price);
+        for ($i = 0; $i < strlen($priceReversed); $i++) {
+            if (strcmp($priceReversed[$i], "0") == 0) {
+                $subStrIndex = $i + 1;
+            } else if (strcmp($priceReversed[$i], ".") == 0) {
+                $priceReversed = "0" . $priceReversed;
+                break;
+            } else {
+                break;
+            }
+        }
 
-	    return strrev(substr($priceReversed, $subStrIndex));
+        return strrev(substr($priceReversed, $subStrIndex));
+    }
+
+    public function calculateInstallmentPrice($paidPrice, $grandTotal)
+    {
+        return $this->parsePrice($paidPrice - $grandTotal);
     }
 
 }

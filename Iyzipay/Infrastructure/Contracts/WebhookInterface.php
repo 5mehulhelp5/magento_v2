@@ -10,15 +10,15 @@ interface WebhookInterface
      * Get the response from the webhook URL key.
      *
      * @param string $webhookUrlKey The webhook URL key to get the response for.
-     * @return string The response from the webhook.
+     * @return void
      */
-    public function getResponse(string $webhookUrlKey): string;
+    public function getResponse(string $webhookUrlKey): void;
 
     /**
      * Get the HTTP response based on the webhook response.
      *
      * @param stdClass $response The webhook response object.
-     * @return string The HTTP response.
+     * @return void The HTTP response.
      */
-    public function getHttpResponse(stdClass $response): string;
+    public function getHttpResponse(stdClass $response): void;
 }

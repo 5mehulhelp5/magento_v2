@@ -170,11 +170,18 @@ class InstallSchema implements InstallSchemaInterface
                 'Id'
             )
             ->addColumn(
-                'magento_order_id',
+                'order_id',
                 Table::TYPE_INTEGER,
                 null,
                 ['unsigned' => true, 'nullable' => false],
                 'Magento Order Id'
+            )
+            ->addColumn(
+                'quote_id',
+                Table::TYPE_INTEGER,
+                null,
+                ['unsigned' => true, 'nullable' => false],
+                'Magento Quote Id'
             )
             ->addColumn(
                 'iyzico_payment_token',
@@ -214,12 +221,24 @@ class InstallSchema implements InstallSchemaInterface
             ->addForeignKey(
                 $setup->getFkName(
                     'iyzico_order_job',
-                    'magento_order_id',
+                    'order_id',
                     'sales_order',
                     'entity_id'
                 ),
-                'magento_order_id',
+                'order_id',
                 $setup->getTable('sales_order'),
+                'entity_id',
+                Table::ACTION_CASCADE
+            )
+            ->addForeignKey(
+                $setup->getFkName(
+                    'iyzico_order_job',
+                    'quote_id',
+                    'quote',
+                    'entity_id'
+                ),
+                'quote_id',
+                $setup->getTable('quote'),
                 'entity_id',
                 Table::ACTION_CASCADE
             )

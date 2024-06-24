@@ -7,7 +7,9 @@
 "Back", "Back"
 "Token not found", "Token not found"
 "No order found with the given token.", "No order found with the given token."
+"Installment Info: %d Installment / %s %s", "Installment Info: %d Installment / %s %s"
 
+"START_ORDER", "The order was initiated asynchronously."
 "3D_SECURITY_ERROR", "3D security error."
 "FAILURE", "Payment has failed."
 "SUCCESS", "Payment has been successfully completed."
@@ -18,6 +20,8 @@
 "CREDIT_PAYMENT_AUTH_SUCCESS", "Shopping credit payment has been authorized."
 "CREDIT_PAYMENT_AUTH_FAILURE", "Shopping credit payment authorization has failed."
 "BANK_TRANSFER_AUTH_SUCCESS", "Bank transfer payment has been authorized."
+"RECEIVED_ORDER", "The order has been received."
+
 "NOT_SUFFICIENT_FUNDS", "Insufficient funds or credit limit exceeded"
 "DO_NOT_HONOUR", "Transaction not approved"
 "INVALID_TRANSACTION", "Invalid transaction"

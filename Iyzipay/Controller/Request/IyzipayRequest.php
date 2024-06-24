@@ -47,9 +47,9 @@ use Magento\Quote\Model\Quote;
 use Magento\Store\Model\ScopeInterface;
 use Magento\Store\Model\StoreManagerInterface;
 use Magento\Sales\Api\OrderRepositoryInterface;
+use Magento\Sales\Model\Order;
 
-
-class IyzicoCheckoutForm extends Action
+class IyzipayRequest extends Action
 {
 
     protected Context $_context;
@@ -130,8 +130,8 @@ class IyzicoCheckoutForm extends Action
         $cookieHelper = $this->getCookieHelper();
 
         $postData = $this->getRequest()->getPostValue();
-        $customerMail = $postData['iyziQuoteEmail'];
-        $customerBasketId = $postData['iyziQuoteId'];
+        $customerMail = $postData['iyziQuoteEmail'] ?? null;
+        $customerBasketId = $postData['iyziQuoteId'] ?? null;
         $checkoutSession = $this->_checkoutSession->getQuote();
         $storeId = $this->_storeManager->getStore()->getId();
         $locale = $this->getLocale($storeId);
@@ -314,7 +314,7 @@ class IyzicoCheckoutForm extends Action
      * @param $apiKey
      * @return string
      */
-    private function getCustomerCardUserKey($customerId, $apiKey)
+    private function getCustomerCardUserKey(int $customerId, string $apiKey)
     {
         if ($customerId) {
             $iyziCardFind = $this->_iyziCardFactory->create()->getCollection()
@@ -411,11 +411,10 @@ class IyzicoCheckoutForm extends Action
     private function processSuccessfulResponse($requestResponse, $currency)
     {
         $this->_quote = $this->_checkoutSession->getQuote();
-        $this->_quote->setIyziCurrency($currency);
+        $orderId = $this->placeOrder();
+        $quoteId = $this->_quote->getId();
 
-        $magentoOrderId = $this->placeOrder();
-
-        $this->saveIyziOrderTable($requestResponse, $magentoOrderId);
+        $this->saveIyziOrderTable($requestResponse, $orderId, $quoteId);
         return ['success' => true, 'url' => $requestResponse->paymentPageUrl];
     }
 
@@ -436,14 +435,13 @@ class IyzicoCheckoutForm extends Action
             $orderId = $this->_cartManagement->placeOrder($this->_quote->getId());
         }
 
-        // Load the order by its ID
         $order = $this->_orderRepository->get($orderId);
+        $comment = __("START_ORDER");
 
-        // Set the status to pending_payment
-        $order->setState(\Magento\Sales\Model\Order::STATE_PENDING_PAYMENT)
-            ->setStatus('pending_payment');
+        $order->setState('received')->setStatus('received');
+        $order->addStatusHistoryComment($comment);
+        $order->getPayment()->setMethod('iyzipay');
 
-        // Save the order
         $this->_orderRepository->save($order);
 
         return $orderId;
@@ -455,16 +453,17 @@ class IyzicoCheckoutForm extends Action
      * This function is responsible for saving the iyzi order table.
      *
      * @param $requestResponse
-     * @param $magentoOrderId
+     * @param $orderId
      *
      * @throws CouldNotSaveException
      */
-    private function saveIyziOrderTable($requestResponse, $magentoOrderId)
+    private function saveIyziOrderTable($requestResponse, $orderId, $quoteId)
     {
         $iyzicoOrderJob = $this->_objectManager->create('Iyzico\Iyzipay\Model\IyziOrderJob');
 
         $iyzicoOrderJob->setData([
-            'magento_order_id' => $magentoOrderId,
+            'order_id' => $orderId,
+            'quote_id' => $quoteId,
             'iyzico_payment_token' => $requestResponse->token,
             'iyzico_conversationId' => $requestResponse->conversationId,
             'expire_at' => date('Y-m-d H:i:s', strtotime('+1 day')),

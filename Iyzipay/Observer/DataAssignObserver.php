@@ -22,122 +22,53 @@
 namespace Iyzico\Iyzipay\Observer;
 
 use Magento\Framework\Event\Observer;
-use Magento\Payment\Observer\AbstractDataAssignObserver;
-use Magento\Framework\ObjectManager\ObjectManager;
-use Magento\Sales\Model\Order;
+use Magento\Framework\Event\ObserverInterface;
 
-
-
-class DataAssignObserver implements \Magento\Framework\Event\ObserverInterface {
+class DataAssignObserver implements ObserverInterface
+{
     /**
-     * @var \Magento\Framework\ObjectManager\ObjectManager
-    */
-    protected $_objectManager;
-    protected $_orderFactory;
-    protected $_checkoutSession;
-
-
-    public function __construct(
-        \Magento\Checkout\Model\Session $checkoutSession,
-        \Magento\Sales\Model\OrderFactory $orderFactory,
-        \Magento\Framework\ObjectManager\ObjectManager $objectManager
-    ) {
-        $this->_objectManager = $objectManager;
-        $this->_orderFactory = $orderFactory;
-        $this->_checkoutSession = $checkoutSession;
-    }
-    /**
+     * Execute observer
+     *
+     * This method is called when the event specified in the events.xml file is triggered.
+     *
      * @param Observer $observer
      * @return void
      */
     public function execute(Observer $observer)
     {
+        $order = $observer->getEvent()->getOrder();
 
-        if($observer->getEvent()->getOrder()->getPayment()->getMethodInstance()->getCode() == 'iyzipay'){
+        $paymentMethod = $order->getPayment()->getMethod();
+        $installmentCount = $order->getInstallmentCount();
 
+        if (isset($installmentCount) && $installmentCount > 1 && $paymentMethod == 'iyzipay') {
 
-            $paymentId = $this->_checkoutSession->getQuote()->getIyzicoPaymentId();
-            $iyziPaymentStatus = $this->_checkoutSession->getQuote()->getIyziPaymentStatus();
+            $getInstallmentFee = $order->getInstallmentFee();
+            $installmentCount = $order->getInstallmentCount();
+            $grandTotalWithFee = $order->getGrandTotal();
+            $subTotalWithFee = $order->getSubTotal();
+            $currency = $order->getOrderCurrencyCode();
 
+            $installmentCount = !empty($installmentCount) ? $installmentCount : 1;
+            $getInstallmentFee = !empty($getInstallmentFee) ? $getInstallmentFee : '0.00';
+            $grandTotalWithFee = !empty($grandTotalWithFee) ? $grandTotalWithFee : 0.00;
+            $subTotalWithFee = !empty($subTotalWithFee) ? $subTotalWithFee : 0.00;
+            $currency = !empty($currency) ? $currency : 'N/A';
 
-            $order = $observer->getEvent()->getOrder();
-            if($iyziPaymentStatus == 'PENDING_CREDIT')
-            {
-              $order->setState('pending');
-              $order->setStatus('pending');
+            $order->setBaseTotalPaid($grandTotalWithFee);
+            $order->setTotalPaid($grandTotalWithFee);
+            $order->setSubTotalInvoiced($subTotalWithFee);
+            $order->setBaseSubTotalInvoiced($subTotalWithFee);
+            $order->setBaseTotalDue(0);
+            $order->setTotalDue(0);
 
-              $historyComment = __('Payment Success').$paymentId;
-              $order->addStatusHistoryComment($historyComment);
+            $payment = $order->getPayment();
+            $payment->setBaseAmountPaid($grandTotalWithFee);
+            $payment->setAmountPaid($grandTotalWithFee);
 
-              $historyComment = 'Alışveriş kredisi işlemi başlatıldı.';
-              $order->addStatusHistoryComment($historyComment);
-            }
+            $installmentInfo = sprintf(__('Installment Info: %d Installment / %s %s'), $installmentCount, $getInstallmentFee, $currency);
 
-            if($iyziPaymentStatus == 'success') {
-
-                /* Create Invoice With Installment */
-
-                if($order->getInstallmentFee()) {
-
-                    $grandTotalWithFee = $order->getGrandTotal();
-                    $subTotalWithFee = $order->getSubTotal();
-
-
-                    $order->setBaseTotalPaid($grandTotalWithFee);
-                    $order->setTotalPaid($grandTotalWithFee);
-                    $order->setSubTotalInvoiced($subTotalWithFee);
-                    $order->setBaseSubTotalInvoiced($subTotalWithFee);
-                    $order->setBaseTotalDue(0);
-                    $order->setBaseTotalDue(0);
-
-
-                    $payment = $order->getPayment();
-                    $payment->setBaseAmountPaid($grandTotalWithFee);
-                    $payment->setAmountPaid($grandTotalWithFee);
-
-                }
-
-                /* Create Order With Installment */
-                $installmentFee = $this->_checkoutSession->getQuote()->getInstallmentFee();
-                $installmentCount = $this->_checkoutSession->getQuote()->getInstallmentCount();
-                $grandTotal     = $this->_checkoutSession->getQuote()->getGrandTotal();
-                $subTotal       = $this->_checkoutSession->getQuote()->getSubtotal();
-                $iyziCurrency   = $this->_checkoutSession->getQuote()->getIyziCurrency();
-
-                if($installmentFee && $grandTotal) {
-
-                    $grandTotal+= $installmentFee;
-                    $subTotal+= $installmentFee;
-                    $iyzicoGrandTotal = $grandTotal;
-                    $iyzicoSubTotal = $subTotal;
-
-                    $order->setInstallmentFee($installmentFee);
-                    $order->setInstallmentCount($installmentCount);
-                    $order->setSubTotal($iyzicoSubTotal);
-                    $order->setBaseSubTotal($iyzicoSubTotal);
-                    $order->setSubTotalInclTax($iyzicoSubTotal);
-                    $order->setGrandTotal($iyzicoGrandTotal);
-                    $order->setBaseGrandTotal($iyzicoGrandTotal);
-
-                    $payment = $order->getPayment();
-                    $payment->setAmountOrdered($iyzicoGrandTotal);
-                    $payment->setBaseAmountOrdered($iyzicoGrandTotal);
-
-                    /* Add Installment Info */
-                    $installmentInfo = __('Installment Info:').$installmentCount.
-                                       __('Installment').' / '.$installmentFee
-                                       .' '.$iyziCurrency;
-
-                    $order->addStatusHistoryComment($installmentInfo)->setIsVisibleOnFront(true);
-
-                }
-
-                $order->setState('processing');
-                $order->setStatus('processing');
-
-                $historyComment = __('Payment Success').$paymentId;
-                $order->addStatusHistoryComment($historyComment);
-            }
+            $order->addStatusHistoryComment($installmentInfo)->setIsVisibleOnFront(true);
         }
     }
 }

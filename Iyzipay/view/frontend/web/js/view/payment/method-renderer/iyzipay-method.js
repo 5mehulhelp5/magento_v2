@@ -39,7 +39,7 @@ define(
                     }
 
                     $.ajax({
-                        url: urlBuilder.build("Iyzico_Iyzipay/request/iyzicocheckoutform"),
+                        url: urlBuilder.build("Iyzico_Iyzipay/request/iyzipayrequest"),
                         data: {iyziQuoteEmail: quoteEmail, iyziQuoteId: guestQuoteId},
                         type: "post",
                         dataType: "json",

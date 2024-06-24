@@ -21,7 +21,7 @@ class XWwwFormUrlencoded implements \Magento\Framework\Webapi\Rest\Request\Deser
      * XWwwFormUrlencoded constructor.
      *
      * @param \Iyzico\Iyzipay\Model\Postbackwebhook\Decoder $decoder
-     * @param State                                             $appState
+     * @param State $appState
      */
     public function __construct(\Iyzico\Iyzipay\Model\Postbackwebhook\Decoder $decoder, State $appState)
     {

@@ -7,7 +7,9 @@
 "Back", "Geri"
 "Token not found", "Token bulunamadı"
 "No order found with the given token.", "Token ile sipariş bulunamadı."
+"Installment Info: %d Installment / %s %s","Taksit Bilgisi: %d Taksit / %s %s"
 
+"START_ORDER", "Asenkron olarak sipariş başlatıldı."
 "3D_SECURITY_ERROR", "3D güvenlik hatası."
 "FAILURE", "Ödeme işlemi başarısız."
 "SUCCESS", "Ödeme işlemi başarılı."
@@ -18,6 +20,8 @@
 "CREDIT_PAYMENT_AUTH_SUCCESS", "Alışveriş kredisi ödemesi başarılı."
 "CREDIT_PAYMENT_AUTH_FAILURE", "Alışveriş kredisi ödemesi başarısız."
 "BANK_TRANSFER_AUTH_SUCCESS", "Banka havalesi ödemesi başarılı."
+"RECEIVED_ORDER", "Sipariş alındı."
+
 "NOT_SUFFICIENT_FUNDS", "Kart limiti yetersiz, yetersiz bakiye"
 "DO_NOT_HONOUR", "İşlem onaylanmadı"
 "INVALID_TRANSACTION", "Geçersiz işlem"

@@ -27,7 +27,7 @@ class ObjectHelper
         $object->basketId = $quoteId;
         $object->paymentGroup = 'PRODUCT';
         $object->forceThreeDS = "0";
-        $object->callbackUrl = $callBack . "Iyzico_Iyzipay/response/iyzicocheckoutform";
+        $object->callbackUrl = $callBack . "Iyzico_Iyzipay/response/iyzipayresponse";
         $object->cardUserKey = $cardUserKey;
         $object->paymentSource = "MAGENTO2|" . $magentoVersion . "|SPACE-2.0.0";
         $object->goBackUrl = $callBack;
