@@ -56,3 +56,12 @@
 "INVALID_EXPIRE_YEAR_MONTH", "Son kullanma tarihi geçersiz"
 "INVALID_AMOUNT", "Geçersiz tutar"
 
+"Every Minute", "Her Dakika"
+"Every 3 Minutes", "Her 3 Dakika"
+"Every Hour", "Her Saat"
+"Every 2 Hours", "Her 2 Saat"
+"Every 4 Hours", "Her 4 Saat"
+"Every 8 Hours", "Her 8 Saat"
+"Every 12 Hours", "Her 12 Saat"
+"Every Day at Midnight", "Her Gün Gece Yarısı"
+"Custom", "Özel"

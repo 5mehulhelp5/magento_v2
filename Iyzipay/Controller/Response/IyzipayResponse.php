@@ -25,10 +25,13 @@ namespace Iyzico\Iyzipay\Controller\Response;
 use Exception;
 use Iyzico\Iyzipay\Enums\ErrorCode;
 use Iyzico\Iyzipay\Helper\PkiStringBuilder;
+use Iyzico\Iyzipay\Helper\PkiStringBuilderFactory;
 use Iyzico\Iyzipay\Helper\PriceHelper;
 use Iyzico\Iyzipay\Helper\RequestHelper;
+use Iyzico\Iyzipay\Helper\RequestHelperFactory;
 use Iyzico\Iyzipay\Helper\ResponseObjectHelper;
 use Iyzico\Iyzipay\Helper\WebhookHelper;
+use Iyzico\Iyzipay\Helper\WebhookHelperFactory;
 use Iyzico\Iyzipay\Logger\IyziLogger;
 use Iyzico\Iyzipay\Model\IyziCardFactory;
 use Iyzico\Iyzipay\Model\IyziOrderFactory;
@@ -53,55 +56,65 @@ use Throwable;
 
 class IyzipayResponse extends Action implements CsrfAwareActionInterface
 {
-    protected Context $_context;
-    protected CheckoutSession $_checkoutSession;
-    protected CustomerSession $_customerSession;
-    protected CartManagementInterface $_cartManagement;
-    protected ResultFactory $_resultRedirect;
-    protected ScopeConfigInterface $_scopeConfig;
-    protected IyziOrderFactory $_iyziOrderFactory;
-    protected IyziCardFactory $_iyziCardFactory;
-    protected ManagerInterface $_messageManager;
-    protected StoreManagerInterface $_storeManager;
-    protected PriceHelper $_priceHelper;
-    protected IyziLogger $_iyziLogger;
-    protected ResponseObjectHelper $_responseObjectHelper;
-    protected TemplateContext $_templateContext;
-    protected OrderRepositoryInterface $_orderRepository;
+    protected Context $context;
+    protected CheckoutSession $checkoutSession;
+    protected CustomerSession $customerSession;
+    protected TemplateContext $templateContext;
+    protected CartManagementInterface $cartManagement;
+    protected OrderRepositoryInterface $orderRepository;
+    protected $resultFactory;
+    protected ScopeConfigInterface $scopeConfig;
+    protected IyziOrderFactory $iyziOrderFactory;
+    protected IyziCardFactory $iyziCardFactory;
+    protected $messageManager;
+    protected StoreManagerInterface $storeManager;
+    protected PriceHelper $priceHelper;
+    protected IyziLogger $iyziLogger;
+    protected ResponseObjectHelper $responseObjectHelper;
+    protected IyziOrderJobCollection $iyziOrderJobCollection;
+    protected WebhookHelperFactory $webhookHelperFactory;
+    protected PkiStringBuilderFactory $pkiStringBuilderFactory;
+    protected RequestHelperFactory $requestHelperFactory;
 
     public function __construct
     (
         Context $context,
         CheckoutSession $checkoutSession,
         CustomerSession $customerSession,
-        ScopeConfigInterface $scopeConfig,
-        StoreManagerInterface $storeManager,
         CartManagementInterface $cartManagement,
         OrderRepositoryInterface $orderRepository,
-        ManagerInterface $messageManager,
         ResultFactory $resultFactory,
-        IyziCardFactory $iyziCardFactory,
+        ScopeConfigInterface $scopeConfig,
         IyziOrderFactory $iyziOrderFactory,
+        IyziCardFactory $iyziCardFactory,
+        ManagerInterface $messageManager,
+        StoreManagerInterface $storeManager,
         PriceHelper $priceHelper,
         IyziLogger $iyziLogger,
         ResponseObjectHelper $responseObjectHelper,
-        TemplateContext $templateContext,
+        IyziOrderJobCollection $iyziOrderJobCollection,
+        WebhookHelperFactory $webhookHelperFactory,
+        PkiStringBuilderFactory $pkiStringBuilderFactory,
+        RequestHelperFactory $requestHelperFactory
     ) {
         parent::__construct($context);
-        $this->_templateContext = $templateContext;
-        $this->_checkoutSession = $checkoutSession;
-        $this->_customerSession = $customerSession;
-        $this->_cartManagement = $cartManagement;
-        $this->_orderRepository = $orderRepository;
-        $this->_resultRedirect = $resultFactory;
-        $this->_scopeConfig = $scopeConfig;
-        $this->_iyziOrderFactory = $iyziOrderFactory;
-        $this->_iyziCardFactory = $iyziCardFactory;
-        $this->_messageManager = $messageManager;
-        $this->_storeManager = $storeManager;
-        $this->_priceHelper = $priceHelper;
-        $this->_responseObjectHelper = $responseObjectHelper;
-        $this->_iyziLogger = $iyziLogger;
+        $this->checkoutSession = $checkoutSession;
+        $this->customerSession = $customerSession;
+        $this->cartManagement = $cartManagement;
+        $this->orderRepository = $orderRepository;
+        $this->resultFactory = $resultFactory;
+        $this->scopeConfig = $scopeConfig;
+        $this->iyziOrderFactory = $iyziOrderFactory;
+        $this->iyziCardFactory = $iyziCardFactory;
+        $this->messageManager = $messageManager;
+        $this->storeManager = $storeManager;
+        $this->priceHelper = $priceHelper;
+        $this->iyziLogger = $iyziLogger;
+        $this->responseObjectHelper = $responseObjectHelper;
+        $this->iyziOrderJobCollection = $iyziOrderJobCollection;
+        $this->webhookHelperFactory = $webhookHelperFactory;
+        $this->pkiStringBuilderFactory = $pkiStringBuilderFactory;
+        $this->requestHelperFactory = $requestHelperFactory;
     }
 
 
@@ -116,7 +129,7 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
     public function createCsrfValidationException(RequestInterface $request): ?InvalidRequestException
     {
         $params = $request->getParams();
-        $this->_iyziLogger->critical("createCsrfValidationException: " . json_encode($params), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+        $this->iyziLogger->critical("createCsrfValidationException: " . json_encode($params), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
         return null;
     }
 
@@ -153,13 +166,13 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
 
         try {
             $token = $this->getToken();
-            $orderId = $this->findOrderIdByToken($token);
+            $orderId = $this->findParametersByToken($token, 'order_id');
             $order = $this->findOrderById($orderId);
             $response = $this->getPaymentDetail($token);
 
             $this->updateOrderPaymentStatus($orderId, $response);
 
-            if ($this->getUserId() != 0) {
+             if ($this->getUserId() != 0) {
                 $this->setUserCard($response);
             }
 
@@ -167,19 +180,19 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
                 return $this->handleError($response, $this->resultRedirectFactory->create());
             }
 
-            $this->_checkoutSession->setLastQuoteId($order->getQuoteId())
+            $this->checkoutSession->setLastQuoteId($order->getQuoteId())
                 ->setLastSuccessQuoteId($order->getQuoteId())
                 ->setLastOrderId($order->getId())
                 ->setLastRealOrderId($order->getIncrementId())
                 ->setLastOrderStatus($order->getStatus());
 
-            $this->_checkoutSession->getQuote()->setIsActive(false)->save();
+            $this->checkoutSession->getQuote()->setIsActive(false)->save();
 
             $resultRedirect = $this->resultRedirectFactory->create();
             return $resultRedirect->setPath('checkout/onepage/success', ['_secure' => true]);
 
         } catch (Exception $e) {
-            $this->_iyziLogger->critical("execute error: " . $e->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+            $this->iyziLogger->critical("execute error: " . $e->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
             $this->messageManager->addErrorMessage(__('An error occurred while processing your payment. Please try again.'));
             $resultRedirect = $this->resultRedirectFactory->create();
             return $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
@@ -196,7 +209,7 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
      */
     public function webhook(string $token, string $iyziEventType)
     {
-        $orderId = $this->findOrderIdByToken($token);
+        $orderId = $this->findParametersByToken($token, 'order_id');
         $response = $this->getPaymentDetail($token);
 
         $this->updateOrderFromWebhook($iyziEventType, $orderId, $response);
@@ -279,51 +292,17 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
     }
 
     /**
-     * Find Order Id By Token
+     * Find Parameters By Token
      *
-     * This function is responsible for finding the order id by token.
-     *
-     * @param string $token
-     * @return string
-     */
-    private function findOrderIdByToken(string $token): string
-    {
-        $iyzicoOrderJobCollection = $this->_objectManager->create(IyziOrderJobCollection::class);
-        $iyzicoOrderJob = $iyzicoOrderJobCollection->addFieldToFilter('iyzico_payment_token', $token)->getFirstItem();
-
-        return $iyzicoOrderJob->getData('order_id');
-    }
-
-    /**
-     * Find Quote Id By Token
-     *
-     * This function is responsible for finding the quote id by token.
+     * This function is responsible for finding the parameters by token.
      *
      * @param string $token
-     * @return string
+     * @return mixed
      */
-    private function findQuoteIdByToken(string $token): string
+    private function findParametersByToken(string $token, string $find): mixed
     {
-        $iyzicoOrderJobCollection = $this->_objectManager->create(IyziOrderJobCollection::class);
-        $iyzicoOrderJob = $iyzicoOrderJobCollection->addFieldToFilter('iyzico_payment_token', $token)->getFirstItem();
-
-        return $iyzicoOrderJob->getData('quote_id');
-    }
-
-    /**
-     * Find Conversation Id By Token
-     *
-     * This function is responsible for finding the conversation id by token.
-     *
-     * @param string $token
-     * @return string
-     */
-    private function findConversationIdByToken(string $token): string
-    {
-        $iyzicoOrderJobCollection = $this->_objectManager->create(IyziOrderJobCollection::class);
-        $iyzicoOrderJob = $iyzicoOrderJobCollection->addFieldToFilter('iyzico_payment_token', $token)->getFirstItem();
-
-        return $iyzicoOrderJob->getData('iyzico_conversationId');
+        $iyzicoOrderJob = $this->iyziOrderJobCollection->addFieldToFilter('iyzico_payment_token', $token)->getFirstItem();
+        return $iyzicoOrderJob->getData($find);
     }
 
     /**
@@ -337,9 +316,9 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
     private function findOrderById(string $orderId): OrderInterface|null
     {
         try {
-            return $this->_orderRepository->get($orderId);
+            return $this->orderRepository->get($orderId);
         } catch (NoSuchEntityException $e) {
-            $this->_iyziLogger->critical("findOrderById: $orderId - Message: " . $e->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+            $this->iyziLogger->critical("findOrderById: $orderId - Message: " . $e->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
             return null;
         }
     }
@@ -413,12 +392,12 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
     {
         $grandTotal = $order->getGrandTotal();
 
-        $installmentPrice = $this->_priceHelper->calculateInstallmentPrice($paidPrice, $grandTotal);
+        $installmentPrice = $this->priceHelper->calculateInstallmentPrice($paidPrice, $grandTotal);
 
         $order->setInstallmentFee($installmentPrice);
         $order->setInstallmentCount($installment);
 
-        // Add installment fee to order history
+        // TODO: DataAssignObserver Check
 
         return $order;
     }
@@ -434,7 +413,7 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
      */
     private function setIyziOrder(object $response, string $orderId)
     {
-        $iyziOrder = $this->_objectManager->create('Iyzico\Iyzipay\Model\IyziOrder');
+        $iyziOrder = $this->iyziOrderFactory->create();
         $iyziOrder->setData([
             'payment_id' => $response->paymentId,
             'total_amount' => $response->paidPrice,
@@ -445,9 +424,8 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
         try {
             $iyziOrder->save();
         } catch (Throwable $th) {
-            $this->_iyziLogger->critical("setIyziOrder: " . $th->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+            $this->iyziLogger->critical("setIyziOrder: " . $th->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
         }
-
     }
 
     /**
@@ -463,9 +441,9 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
         $defination = $this->getPaymentDefinition();
         $pkiStringBuilder = $this->getPkiStringBuilder();
         $requestHelper = $this->getRequestHelper();
-        $conversationId = $this->findConversationIdByToken($token);
+        $conversationId = $this->findParametersByToken($token, 'iyzico_conversationId');
 
-        $tokenDetailObject = $this->_responseObjectHelper->createTokenDetailObject($conversationId, $token);
+        $tokenDetailObject = $this->responseObjectHelper->createTokenDetailObject($conversationId, $token);
         $iyzicoPkiString = $pkiStringBuilder->generatePkiString($tokenDetailObject);
         $authorization = $pkiStringBuilder->generateAuthorization($iyzicoPkiString, $defination['apiKey'], $defination['secretKey'], $defination['rand']);
         $iyzicoJson = json_encode($tokenDetailObject, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
@@ -484,9 +462,9 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
     {
         return [
             'rand' => uniqid(),
-            'baseUrl' => $this->_scopeConfig->getValue('payment/iyzipay/sandbox') ? 'https://sandbox-api.iyzipay.com' : 'https://api.iyzipay.com',
-            'apiKey' => $this->_scopeConfig->getValue('payment/iyzipay/api_key'),
-            'secretKey' => $this->_scopeConfig->getValue('payment/iyzipay/secret_key')
+            'baseUrl' => $this->scopeConfig->getValue('payment/iyzipay/sandbox') ? 'https://sandbox-api.iyzipay.com' : 'https://api.iyzipay.com',
+            'apiKey' => $this->scopeConfig->getValue('payment/iyzipay/api_key'),
+            'secretKey' => $this->scopeConfig->getValue('payment/iyzipay/secret_key')
         ];
     }
 
@@ -499,10 +477,10 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
      */
     private function getUserId(): int
     {
-        if (!$this->_customerSession->isLoggedIn()) {
+        if (!$this->customerSession->isLoggedIn()) {
             return 0;
         } else {
-            return $this->_customerSession->getCustomerId();
+            return $this->customerSession->getCustomerId();
         }
     }
 
@@ -525,9 +503,9 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
      *
      * @return WebhookHelper
      */
-    private function getWebhookHelper()
+    private function getWebhookHelper(): WebhookHelper
     {
-        return new WebhookHelper($this->_templateContext);
+        return $this->webhookHelperFactory->create();
     }
 
     /**
@@ -537,9 +515,9 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
      *
      * @return PkiStringBuilder
      */
-    private function getPkiStringBuilder()
+    private function getPkiStringBuilder(): PkiStringBuilder
     {
-        return new PkiStringBuilder();
+        return $this->pkiStringBuilderFactory->create();
     }
 
     /**
@@ -549,9 +527,9 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
      *
      * @return RequestHelper
      */
-    private function getRequestHelper()
+    private function getRequestHelper(): RequestHelper
     {
-        return new RequestHelper();
+        return $this->requestHelperFactory->create();
     }
 
     /**
@@ -563,7 +541,7 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
      */
     private function getIyzipayOrderStatus(): string
     {
-        return $this->_scopeConfig->getValue('payment/iyzipay/order_status');
+        return $this->scopeConfig->getValue('payment/iyzipay/order_status');
     }
 
     /**
@@ -584,7 +562,7 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
             $errorCode = ErrorCode::from($response->errorCode);
             $errorMessage = $errorCode->getErrorMessage();
             $webhookHelper->webhookHttpResponse($response->errorCode . '-' . $errorMessage, 404);
-            $this->_iyziLogger->critical("handleWebhookError: " . $response->errorCode . '-' . $errorMessage, ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+            $this->iyziLogger->critical("handleWebhookError: " . $response->errorCode . '-' . $errorMessage, ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
         }
     }
 
@@ -602,9 +580,9 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
         $errorCode = ErrorCode::from($response->errorCode);
         $errorMessage = $errorCode->getErrorMessage();
 
-        $this->_iyziLogger->critical("handleError: " . $response->errorCode . '-' . $errorMessage, ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+        $this->iyziLogger->critical("handleError: " . $response->errorCode . '-' . $errorMessage, ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
 
-        $this->_messageManager->addError($errorMessage);
+        $this->messageManager->addError($errorMessage);
         return $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
     }
 
@@ -623,7 +601,7 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
         $customerId = $this->getUserId();
 
         if (isset($response->cardUserKey) && $customerId != 0) {
-            $iyziCardFind = $this->_iyziCardFactory->create()->getCollection()
+            $iyziCardFind = $this->iyziCardFactory->create()->getCollection()
                 ->addFieldToFilter('customer_id', $customerId)
                 ->addFieldToFilter('api_key', $defination['apiKey'])
                 ->addFieldToSelect('card_user_key');
@@ -633,7 +611,7 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
             $customerCardUserKey = !empty($iyziCardFind[0]['card_user_key']) ? $iyziCardFind[0]['card_user_key'] : null;
 
             if ($response->cardUserKey != $customerCardUserKey) {
-                $iyziCardModel = $this->_iyziCardFactory->create([
+                $iyziCardModel = $this->iyziCardFactory->create([
                     'customer_id' => $customerId,
                     'card_user_key' => $response->cardUserKey,
                     'api_key' => $defination['apiKey'],

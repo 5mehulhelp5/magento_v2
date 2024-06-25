@@ -4,10 +4,6 @@ namespace Iyzico\Iyzipay\Helper;
 
 class PriceHelper
 {
-    /**
-     * TODO: subTotalPriceCalc (yeni: calculateSubtotalPrice), priceParser (yeni: parsePrice) gibi fonksiyonlar buraya taşınacak
-     */
-
     public function calculateSubtotalPrice($checkout)
     {
         $price = 0;

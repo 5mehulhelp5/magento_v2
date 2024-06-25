@@ -63,6 +63,22 @@
                        translate="label" type="textarea">
                     <label>Instructions</label>
                 </field>
+                <field id="common_cron_settings" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="80" translate="label" type="select">
+                    <label>Common Cron Settings</label>
+                    <source_model>Iyzico\Iyzipay\Model\Config\Source\IyzipayCronSettings</source_model>
+                </field>
+                <field id="custom_cron_settings" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="90" translate="label" type="text">
+                    <label>Custom Cron Settings</label>
+                    <depends>
+                        <field id="common_cron_settings">custom</field>
+                    </depends>
+                    <comment>Enter the custom cron settings in the following format: */5 * * * *</comment>
+                </field>
+                <field id="effective_cron_schedule" translate="label" type="text" sortOrder="100" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Effective Cron Schedule</label>
+                    <frontend_model>Iyzico\Iyzipay\Block\Adminhtml\System\Form\Hidden</frontend_model>
+                    <comment>This field is automatically updated based on the Common or Custom Cron Settings.</comment>
+                </field>
             </group>
         </section>
     </system>

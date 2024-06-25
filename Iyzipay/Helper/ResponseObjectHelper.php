@@ -6,10 +6,6 @@ use stdClass;
 
 class ResponseObjectHelper
 {
-    /**
-     * TODO: generateTokenDetailObject (yeni: createTokenDetailObject)
-     */
-
     public function createTokenDetailObject($conversationId, $token)
     {
         $object = new stdClass();

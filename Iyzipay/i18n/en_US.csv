@@ -55,3 +55,14 @@
 "ISSUER_OR_SWITCH_INOPERATIVE", "Issuer or switch inoperative"
 "INVALID_EXPIRE_YEAR_MONTH", "Invalid expiry date"
 "INVALID_AMOUNT", "Invalid amount"
+
+"Every Minute", "Every Minute"
+"Every 3 Minutes", "Every 3 Minutes"
+"Every Hour", "Every Hour"
+"Every 2 Hours", "Every 2 Hours"
+"Every 4 Hours", "Every 4 Hours"
+"Every 8 Hours", "Every 8 Hours"
+"Every 12 Hours", "Every 12 Hours"
+"Every Day at Midnight", "Every Day at Midnight"
+"Custom", "Custom"
+

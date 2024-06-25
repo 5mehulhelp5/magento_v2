@@ -4,14 +4,6 @@ namespace Iyzico\Iyzipay\Helper;
 
 class RequestHelper
 {
-    /**
-     * TODO: iyzicoCheckoutFormRequest (yeni: sendCheckoutFormRequest),
-     * TODO: iyzicoCheckoutFormDetailRequest (yeni: sendCheckoutFormDetailRequest),
-     * TODO: iyzicoPostWebhookUrlKey (yeni: postWebhookUrlKey),
-     * TODO: iyzicoOverlayScriptRequest (yeni: sendOverlayScriptRequest),
-     * TODO: curlPost (yeni: sendCurlPostRequest)
-     */
-
     public function sendCheckoutFormRequest($baseUrl, $json, $authorizationData)
     {
         $url = $baseUrl . '/payment/iyzipos/checkoutform/initialize/auth/ecom';
@@ -35,7 +27,9 @@ class RequestHelper
         curl_setopt($curl, CURLOPT_TIMEOUT, 150);
 
         curl_setopt(
-            $curl, CURLOPT_HTTPHEADER, array(
+            $curl,
+            CURLOPT_HTTPHEADER,
+            array(
                 "Authorization: " . $authorizationData['authorization'],
                 "x-iyzi-rnd:" . $authorizationData['rand_value'],
                 "Content-Type: application/json",

@@ -25,81 +25,86 @@ class IyzicoHelper
 {
 
 
-	public function subTotalPriceCalc($customerSession) {
+    public function subTotalPriceCalc($customerSession)
+    {
 
-		$keyNumber 	= 0;
-		$price 		= 0;
+        $keyNumber = 0;
+        $price = 0;
 
-		$basketItems = $customerSession->getAllVisibleItems();
+        $basketItems = $customerSession->getAllVisibleItems();
 
-		foreach ($basketItems as  $item) {
+        foreach ($basketItems as $item) {
 
-			$price+= round($item->getPrice(), 2);
+            $price += round($item->getPrice(), 2);
 
-			$keyNumber++;
+            $keyNumber++;
 
-		}
+        }
 
-		$shipping = $customerSession->getShippingAddress()->getShippingAmount();
+        $shipping = $customerSession->getShippingAddress()->getShippingAmount();
 
-		if($shipping) {
+        if ($shipping) {
 
-			$price+= $shipping;
-		}
+            $price += $shipping;
+        }
 
-		$price = $this->priceParser($price);
+        $price = $this->priceParser($price);
 
-		return $price;
+        return $price;
 
-	}
+    }
 
-	public function cutLocale($locale) {
+    public function cutLocale($locale)
+    {
 
-		$locale = explode('_',$locale);
-		$locale = $locale[0];
+        $locale = explode('_', $locale);
+        $locale = $locale[0];
 
-		return $locale;
-	}
+        return $locale;
+    }
 
-	public function priceParser($price) {
+    public function priceParser($price)
+    {
 
-	    if (strpos($price, ".") === false) {
-	        return $price . ".0";
-	    }
-	    $subStrIndex = 0;
-	    $priceReversed = strrev($price);
-	    for ($i = 0; $i < strlen($priceReversed); $i++) {
-	        if (strcmp($priceReversed[$i], "0") == 0) {
-	            $subStrIndex = $i + 1;
-	        } else if (strcmp($priceReversed[$i], ".") == 0) {
-	            $priceReversed = "0" . $priceReversed;
-	            break;
-	        } else {
-	            break;
-	        }
-	    }
+        if (strpos($price, ".") === false) {
+            return $price . ".0";
+        }
+        $subStrIndex = 0;
+        $priceReversed = strrev($price);
+        for ($i = 0; $i < strlen($priceReversed); $i++) {
+            if (strcmp($priceReversed[$i], "0") == 0) {
+                $subStrIndex = $i + 1;
+            } else if (strcmp($priceReversed[$i], ".") == 0) {
+                $priceReversed = "0" . $priceReversed;
+                break;
+            } else {
+                break;
+            }
+        }
 
-	    return strrev(substr($priceReversed, $subStrIndex));
-	}
-
-
-	public function trimString($address1,$address2) {
-
-		$address = trim($address1)." ".trim($address2);
-
-		return $address;
-	}
+        return strrev(substr($priceReversed, $subStrIndex));
+    }
 
 
-	public function dataCheck($data) {
+    public function trimString($address1, $address2)
+    {
 
-        if(!$data || $data == ' ') {
+        $address = trim($address1) . " " . trim($address2);
+
+        return $address;
+    }
+
+
+    public function dataCheck($data)
+    {
+
+        if (!$data || $data == ' ') {
 
             $data = "NOT PROVIDED";
         }
 
         return $data;
 
-	}
+    }
 
 }

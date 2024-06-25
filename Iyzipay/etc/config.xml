@@ -10,6 +10,8 @@
 				<allowspecific>0</allowspecific>
 				<group>offline</group>
 				<checkout_language>TR</checkout_language>
+                <common_cron_settings>0 0 * * *</common_cron_settings>
+                <effective_cron_schedule>0 0 * * *</effective_cron_schedule>
 			</iyzipay>
 		</payment>
 	</default>
