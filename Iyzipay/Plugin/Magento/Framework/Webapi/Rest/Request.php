@@ -45,7 +45,7 @@ class Request
         ]);
 
 
-        if ($subject->getRequestUri() === ('/rest/v1/iyzico/webhook/' . $webhookUrlKey) || $subject->getRequestUri() === '/index.php/rest/V1/iyzico/callback/') {
+        if ($subject->getRequestUri() === ('/rest/V1/iyzico/webhook/' . $webhookUrlKey) || $subject->getRequestUri() === '/index.php/rest/V1/iyzico/callback/') {
             $result = ['text/html'];
         }
 

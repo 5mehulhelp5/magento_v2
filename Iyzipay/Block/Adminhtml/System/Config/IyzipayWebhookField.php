@@ -50,7 +50,7 @@ class IyzipayWebhookField extends Field
         $webhookUrlKey = $this->_scopeConfig->getValue('payment/iyzipay/webhook_url_key');
 
         if ($webhookUrlKey) {
-            return $this->_storeManager->getStore()->getBaseUrl() . 'rest/v1/iyzico/webhook/' . $webhookUrlKey . '<br>' . $this->getWebhookSubmitButtonHtml();
+            return $this->_storeManager->getStore()->getBaseUrl() . 'rest/V1/iyzico/webhook/' . $webhookUrlKey . '<br>' . $this->getWebhookSubmitButtonHtml();
         } else {
             return 'Clear cookies and then push the "Save Config" button';
         }
