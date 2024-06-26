@@ -42,7 +42,7 @@ class CronHelper extends AbstractHelper
             return $customCronSettings;
         }
 
-        return '0 0 * * *'; // Varsayılan cron zamanlaması
+        return '0 0 * * *';
     }
 
     private function saveEffectiveCronSchedule($schedule)

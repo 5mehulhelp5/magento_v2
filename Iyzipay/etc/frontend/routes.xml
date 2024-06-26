@@ -7,5 +7,8 @@
          <route id="checkout" frontName="checkout">
             <module name="Iyzico_Iyzipay" />
         </route>
+         <route id="iyzipay" frontName="iyzipay">
+            <module name="Iyzico_Iyzipay" />
+        </route>
 	</router>
 </config>

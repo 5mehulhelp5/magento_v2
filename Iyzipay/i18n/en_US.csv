@@ -21,6 +21,9 @@
 "CREDIT_PAYMENT_AUTH_FAILURE", "Shopping credit payment authorization has failed."
 "BANK_TRANSFER_AUTH_SUCCESS", "Bank transfer payment has been authorized."
 "RECEIVED_ORDER", "The order has been received."
+"CANCELLED_ORDER", "The order has been cancelled."
+
+"INIT_THREEDS", "3D secure process has been started."
 
 "NOT_SUFFICIENT_FUNDS", "Insufficient funds or credit limit exceeded"
 "DO_NOT_HONOUR", "Transaction not approved"

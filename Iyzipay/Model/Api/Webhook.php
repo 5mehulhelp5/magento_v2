@@ -6,7 +6,7 @@ use Exception;
 use Iyzico\Iyzipay\Controller\Response\IyzipayResponse;
 use Iyzico\Iyzipay\Helper\WebhookHelper;
 use Iyzico\Iyzipay\Infrastructure\Contracts\WebhookInterface;
-use Iyzico\Iyzipay\Logger\IyziLogger;
+use Iyzico\Iyzipay\Logger\IyziErrorLogger;
 use stdClass;
 
 /**
@@ -20,7 +20,7 @@ class Webhook implements WebhookInterface
 {
     private WebhookHelper $webhookHelper;
     private IyzipayResponse $iyzipayResponse;
-    private IyziLogger $logger;
+    private IyziErrorLogger $logger;
 
     /**
      * Constructor
@@ -28,9 +28,9 @@ class Webhook implements WebhookInterface
      *
      * @param WebhookHelper $webhookHelper
      * @param IyzipayResponse $iyzipayResponse
-     * @param IyziLogger $logger
+     * @param IyziErrorLogger $logger
      */
-    public function __construct(WebhookHelper $webhookHelper, IyzipayResponse $iyzipayResponse, IyziLogger $logger)
+    public function __construct(WebhookHelper $webhookHelper, IyzipayResponse $iyzipayResponse, IyziErrorLogger $logger)
     {
         $this->webhookHelper = $webhookHelper;
         $this->iyzipayResponse = $iyzipayResponse;

@@ -26,10 +26,12 @@ use Exception;
 use Iyzico\Iyzipay\Helper\CookieHelper;
 use Iyzico\Iyzipay\Helper\ObjectHelper;
 use Iyzico\Iyzipay\Helper\PkiStringBuilder;
+use Iyzico\Iyzipay\Helper\PkiStringBuilderFactory;
 use Iyzico\Iyzipay\Helper\PriceHelper;
 use Iyzico\Iyzipay\Helper\RequestHelper;
+use Iyzico\Iyzipay\Helper\RequestHelperFactory;
 use Iyzico\Iyzipay\Helper\StringHelper;
-use Iyzico\Iyzipay\Logger\IyziLogger;
+use Iyzico\Iyzipay\Logger\IyziErrorLogger;
 use Iyzico\Iyzipay\Model\IyziCardFactory;
 use Magento\Checkout\Model\Session as CheckoutSession;
 use Magento\Customer\Model\Session as CustomerSession;
@@ -47,24 +49,25 @@ use Magento\Quote\Model\Quote;
 use Magento\Store\Model\ScopeInterface;
 use Magento\Store\Model\StoreManagerInterface;
 use Magento\Sales\Api\OrderRepositoryInterface;
-use Magento\Sales\Model\Order;
 
 class IyzipayRequest extends Action
 {
 
-    protected Context $_context;
-    protected CheckoutSession $_checkoutSession;
-    protected CustomerSession $_customerSession;
-    protected ScopeConfigInterface $_scopeConfig;
-    protected IyziCardFactory $_iyziCardFactory;
-    protected StoreManagerInterface $_storeManager;
-    protected StringHelper $_stringHelper;
-    protected PriceHelper $_priceHelper;
-    protected JsonFactory $_resultJsonFactory;
-    protected Quote $_quote;
-    protected CartManagementInterface $_cartManagement;
-    protected IyziLogger $_iyziLogger;
-    protected OrderRepositoryInterface $_orderRepository;
+    protected Context $context;
+    protected CheckoutSession $checkoutSession;
+    protected CustomerSession $customerSession;
+    protected ScopeConfigInterface $scopeConfig;
+    protected IyziCardFactory $iyziCardFactory;
+    protected StoreManagerInterface $storeManager;
+    protected StringHelper $stringHelper;
+    protected PriceHelper $priceHelper;
+    protected JsonFactory $resultJsonFactory;
+    protected Quote $quote;
+    protected CartManagementInterface $cartManagement;
+    protected IyziErrorLogger $errorLogger;
+    protected OrderRepositoryInterface $orderRepository;
+    protected PkiStringBuilderFactory $pkiStringBuilderFactory;
+    protected RequestHelperFactory $requestHelperFactory;
 
     public function __construct
     (
@@ -80,21 +83,24 @@ class IyzipayRequest extends Action
         PriceHelper $priceHelper,
         JsonFactory $resultJsonFactory,
         Quote $quote,
-        IyziLogger $iyziLogger
+        IyziErrorLogger $errorLogger,
+        PkiStringBuilderFactory $pkiStringBuilderFactory,
+        RequestHelperFactory $requestHelperFactory
     ) {
-        $this->_context = $context;
-        $this->_checkoutSession = $checkoutSession;
-        $this->_customerSession = $customerSession;
-        $this->_scopeConfig = $scopeConfig;
-        $this->_storeManager = $storeManager;
-        $this->_iyziCardFactory = $iyziCardFactory;
-        $this->_stringHelper = $stringHelper;
-        $this->_priceHelper = $priceHelper;
-        $this->_resultJsonFactory = $resultJsonFactory;
-        $this->_quote = $quote;
-        $this->_cartManagement = $cartManagement;
-        $this->_orderRepository = $orderRepository;
-        $this->_iyziLogger = $iyziLogger;
+        $this->checkoutSession = $checkoutSession;
+        $this->customerSession = $customerSession;
+        $this->scopeConfig = $scopeConfig;
+        $this->storeManager = $storeManager;
+        $this->iyziCardFactory = $iyziCardFactory;
+        $this->stringHelper = $stringHelper;
+        $this->priceHelper = $priceHelper;
+        $this->resultJsonFactory = $resultJsonFactory;
+        $this->quote = $quote;
+        $this->cartManagement = $cartManagement;
+        $this->orderRepository = $orderRepository;
+        $this->errorLogger = $errorLogger;
+        $this->pkiStringBuilderFactory = $pkiStringBuilderFactory;
+        $this->requestHelperFactory = $requestHelperFactory;
         parent::__construct($context);
     }
 
@@ -132,8 +138,8 @@ class IyzipayRequest extends Action
         $postData = $this->getRequest()->getPostValue();
         $customerMail = $postData['iyziQuoteEmail'] ?? null;
         $customerBasketId = $postData['iyziQuoteId'] ?? null;
-        $checkoutSession = $this->_checkoutSession->getQuote();
-        $storeId = $this->_storeManager->getStore()->getId();
+        $checkoutSession = $this->checkoutSession->getQuote();
+        $storeId = $this->storeManager->getStore()->getId();
         $locale = $this->getLocale($storeId);
         $currency = $this->getCurrency();
         $callBack = $this->getCallbackUrl();
@@ -176,9 +182,9 @@ class IyzipayRequest extends Action
             'rand' => uniqid(),
             'customerId' => 0,
             'customerCardUserKey' => '',
-            'baseUrl' => $this->_scopeConfig->getValue('payment/iyzipay/sandbox') ? 'https://sandbox-api.iyzipay.com' : 'https://api.iyzipay.com',
-            'apiKey' => $this->_scopeConfig->getValue('payment/iyzipay/api_key'),
-            'secretKey' => $this->_scopeConfig->getValue('payment/iyzipay/secret_key'),
+            'baseUrl' => $this->scopeConfig->getValue('payment/iyzipay/sandbox') ? 'https://sandbox-api.iyzipay.com' : 'https://api.iyzipay.com',
+            'apiKey' => $this->scopeConfig->getValue('payment/iyzipay/api_key'),
+            'secretKey' => $this->scopeConfig->getValue('payment/iyzipay/secret_key'),
         ];
     }
 
@@ -191,7 +197,7 @@ class IyzipayRequest extends Action
      */
     private function getObjectHelper()
     {
-        return new ObjectHelper($this->_stringHelper, $this->_priceHelper);
+        return new ObjectHelper($this->stringHelper, $this->priceHelper);
     }
 
     /**
@@ -201,9 +207,9 @@ class IyzipayRequest extends Action
      *
      * @return PkiStringBuilder
      */
-    private function getPkiStringBuilder()
+    private function getPkiStringBuilder(): PkiStringBuilder
     {
-        return new PkiStringBuilder();
+        return $this->pkiStringBuilderFactory->create();
     }
 
     /**
@@ -213,9 +219,9 @@ class IyzipayRequest extends Action
      *
      * @return RequestHelper
      */
-    private function getRequestHelper()
+    private function getRequestHelper(): RequestHelper
     {
-        return new RequestHelper();
+        return $this->requestHelperFactory->create();
     }
 
     /**
@@ -240,7 +246,7 @@ class IyzipayRequest extends Action
      */
     private function getLocale($storeId)
     {
-        return $this->_scopeConfig->getValue('general/locale/code', ScopeInterface::SCOPE_STORE, $storeId);
+        return $this->scopeConfig->getValue('general/locale/code', ScopeInterface::SCOPE_STORE, $storeId);
     }
 
     /**
@@ -253,7 +259,7 @@ class IyzipayRequest extends Action
      */
     private function getCurrency()
     {
-        return $this->_storeManager->getStore()->getCurrentCurrency()->getCode();
+        return $this->storeManager->getStore()->getCurrentCurrency()->getCode();
     }
 
     /**
@@ -265,7 +271,7 @@ class IyzipayRequest extends Action
      */
     private function getCallbackUrl()
     {
-        return $this->_storeManager->getStore()->getBaseUrl();
+        return $this->storeManager->getStore()->getBaseUrl();
     }
 
     /**
@@ -290,7 +296,7 @@ class IyzipayRequest extends Action
      */
     private function generateConversationId($quoteId)
     {
-        return $this->_stringHelper->generateConversationId($quoteId);
+        return $this->stringHelper->generateConversationId($quoteId);
     }
 
     /**
@@ -302,7 +308,7 @@ class IyzipayRequest extends Action
      */
     private function getCustomerId()
     {
-        return $this->_customerSession->isLoggedIn() ? $this->_customerSession->getCustomerId() : 0;
+        return $this->customerSession->isLoggedIn() ? $this->customerSession->getCustomerId() : 0;
     }
 
     /**
@@ -317,7 +323,7 @@ class IyzipayRequest extends Action
     private function getCustomerCardUserKey(int $customerId, string $apiKey)
     {
         if ($customerId) {
-            $iyziCardFind = $this->_iyziCardFactory->create()->getCollection()
+            $iyziCardFind = $this->iyziCardFactory->create()->getCollection()
                 ->addFieldToFilter('customer_id', $customerId)
                 ->addFieldToFilter('api_key', $apiKey)
                 ->addFieldToSelect('card_user_key');
@@ -338,8 +344,8 @@ class IyzipayRequest extends Action
      */
     private function storeSessionData($customerMail, $customerBasketId)
     {
-        $this->_customerSession->setEmail($customerMail);
-        $this->_checkoutSession->setGuestQuoteId($customerBasketId);
+        $this->customerSession->setEmail($customerMail);
+        $this->checkoutSession->setGuestQuoteId($customerBasketId);
     }
 
     /**
@@ -360,7 +366,7 @@ class IyzipayRequest extends Action
     private function createPaymentOption($objectHelper, $checkoutSession, $customerCardUserKey, $locale, $conversationId, $currency, $quoteId, $callBack, $magentoVersion)
     {
         $iyzico = $objectHelper->createPaymentOption($checkoutSession, $customerCardUserKey, $locale, $conversationId, $currency, $quoteId, $callBack, $magentoVersion);
-        $iyzico->buyer = $objectHelper->createBuyerObject($checkoutSession, $this->_customerSession->getEmail());
+        $iyzico->buyer = $objectHelper->createBuyerObject($checkoutSession, $this->customerSession->getEmail());
         $iyzico->billingAddress = $objectHelper->createBillingAddressObject($checkoutSession);
         $iyzico->shippingAddress = $objectHelper->createShippingAddressObject($checkoutSession);
         $iyzico->basketItems = $objectHelper->createBasketItems($checkoutSession);
@@ -390,7 +396,7 @@ class IyzipayRequest extends Action
             return $this->processNullResponse();
         }
 
-        $this->_iyziLogger->critical("result must be an array.", ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+        $this->errorLogger->critical("result must be an array.", ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
         return [
             'success' => false,
             'redirect' => 'checkout/error',
@@ -410,9 +416,9 @@ class IyzipayRequest extends Action
      */
     private function processSuccessfulResponse($requestResponse, $currency)
     {
-        $this->_quote = $this->_checkoutSession->getQuote();
+        $this->quote = $this->checkoutSession->getQuote();
         $orderId = $this->placeOrder();
-        $quoteId = $this->_quote->getId();
+        $quoteId = $this->quote->getId();
 
         $this->saveIyziOrderTable($requestResponse, $orderId, $quoteId);
         return ['success' => true, 'url' => $requestResponse->paymentPageUrl];
@@ -427,22 +433,22 @@ class IyzipayRequest extends Action
      */
     private function placeOrder()
     {
-        if ($this->_customerSession->isLoggedIn()) {
-            $orderId = $this->_cartManagement->placeOrder($this->_quote->getId());
+        if ($this->customerSession->isLoggedIn()) {
+            $orderId = $this->cartManagement->placeOrder($this->quote->getId());
         } else {
-            $this->_quote->setCheckoutMethod($this->_cartManagement::METHOD_GUEST);
-            $this->_quote->setCustomerEmail($this->_customerSession->getEmail());
-            $orderId = $this->_cartManagement->placeOrder($this->_quote->getId());
+            $this->quote->setCheckoutMethod($this->cartManagement::METHOD_GUEST);
+            $this->quote->setCustomerEmail($this->customerSession->getEmail());
+            $orderId = $this->cartManagement->placeOrder($this->quote->getId());
         }
 
-        $order = $this->_orderRepository->get($orderId);
+        $order = $this->orderRepository->get($orderId);
         $comment = __("START_ORDER");
 
         $order->setState('received')->setStatus('received');
         $order->addStatusHistoryComment($comment);
         $order->getPayment()->setMethod('iyzipay');
 
-        $this->_orderRepository->save($order);
+        $this->orderRepository->save($order);
 
         return $orderId;
     }
@@ -466,13 +472,13 @@ class IyzipayRequest extends Action
             'quote_id' => $quoteId,
             'iyzico_payment_token' => $requestResponse->token,
             'iyzico_conversationId' => $requestResponse->conversationId,
-            'expire_at' => date('Y-m-d H:i:s', strtotime('+1 day')),
+            'status' => 'received'
         ]);
 
         try {
             $iyzicoOrderJob->save();
         } catch (Exception $e) {
-            $this->_iyziLogger->critical($e->getMessage());
+            $this->errorLogger->critical($e->getMessage());
         }
     }
 
@@ -486,7 +492,7 @@ class IyzipayRequest extends Action
      */
     private function processErrorResponse($requestResponse)
     {
-        $this->_iyziLogger->critical(
+        $this->errorLogger->critical(
             "Error Code: " . $requestResponse->errorCode . " Error Message: " . $requestResponse->errorMessage,
             ['fileName' => __FILE__, 'lineNumber' => __LINE__]
         );
@@ -508,7 +514,7 @@ class IyzipayRequest extends Action
      */
     private function processNullResponse()
     {
-        $this->_iyziLogger->critical(
+        $this->errorLogger->critical(
             "requestResponse must not be NULL",
             ['fileName' => __FILE__, 'lineNumber' => __LINE__]
         );
@@ -531,7 +537,7 @@ class IyzipayRequest extends Action
      */
     private function createJsonResult($result)
     {
-        $resultJson = $this->_resultJsonFactory->create();
+        $resultJson = $this->resultJsonFactory->create();
         return $resultJson->setData($result);
     }
 

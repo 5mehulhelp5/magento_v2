@@ -198,11 +198,25 @@ class InstallSchema implements InstallSchemaInterface
                 'iyzico Payment Conversation Id'
             )
             ->addColumn(
-                'expire_at',
+                'status',
+                Table::TYPE_TEXT,
+                255,
+                ['nullable' => false],
+                'Status'
+            )
+            ->addColumn(
+                'is_controlled',
+                Table::TYPE_BOOLEAN,
+                null,
+                ['nullable' => false, 'default' => 0],
+                'Is Controlled'
+            )
+            ->addColumn(
+                'last_controlled_at',
                 Table::TYPE_TIMESTAMP,
                 null,
-                ['nullable' => false],
-                'Payment Expire At'
+                ['nullable' => true],
+                'Last Controller At'
             )
             ->addIndex(
                 $setup->getIdxName(

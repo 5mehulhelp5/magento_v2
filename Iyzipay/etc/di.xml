@@ -64,12 +64,14 @@
             </argument>
         </arguments>
     </type>
-    <type name="Iyzico\Iyzipay\Logger\IyziLogger">
+    <type name="Iyzico\Iyzipay\Logger\IyziCronLogger">
         <arguments>
-            <argument name="name" xsi:type="string">iyzipay</argument>
-            <argument name="handlers" xsi:type="array">
-                <item name="custom" xsi:type="object">Iyzico\Iyzipay\Logger\Handler\IyziHandler</item>
-            </argument>
+            <argument name="handler" xsi:type="object">Iyzico\Iyzipay\Logger\Handler\IyziCronHandler</argument>
+        </arguments>
+    </type>
+    <type name="Iyzico\Iyzipay\Logger\IyziErrorLogger">
+        <arguments>
+            <argument name="handler" xsi:type="object">Iyzico\Iyzipay\Logger\Handler\IyziErrorHandler</argument>
         </arguments>
     </type>
 </config>

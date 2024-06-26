@@ -4,12 +4,6 @@ namespace Iyzico\Iyzipay\Helper;
 
 class RequestHelper
 {
-    public function sendCheckoutFormRequest($baseUrl, $json, $authorizationData)
-    {
-        $url = $baseUrl . '/payment/iyzipos/checkoutform/initialize/auth/ecom';
-        return $this->sendCurlPostRequest($json, $authorizationData, $url);
-    }
-
     private function sendCurlPostRequest($json, $authorizationData, $url)
     {
 
@@ -41,6 +35,12 @@ class RequestHelper
 
 
         return $result;
+    }
+
+    public function sendCheckoutFormRequest($baseUrl, $json, $authorizationData)
+    {
+        $url = $baseUrl . '/payment/iyzipos/checkoutform/initialize/auth/ecom';
+        return $this->sendCurlPostRequest($json, $authorizationData, $url);
     }
 
     public function sendCheckoutFormDetailRequest($baseUrl, $json, $authorizationData)

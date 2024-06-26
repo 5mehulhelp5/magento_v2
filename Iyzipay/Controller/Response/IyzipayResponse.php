@@ -32,7 +32,7 @@ use Iyzico\Iyzipay\Helper\RequestHelperFactory;
 use Iyzico\Iyzipay\Helper\ResponseObjectHelper;
 use Iyzico\Iyzipay\Helper\WebhookHelper;
 use Iyzico\Iyzipay\Helper\WebhookHelperFactory;
-use Iyzico\Iyzipay\Logger\IyziLogger;
+use Iyzico\Iyzipay\Logger\IyziErrorLogger;
 use Iyzico\Iyzipay\Model\IyziCardFactory;
 use Iyzico\Iyzipay\Model\IyziOrderFactory;
 use Iyzico\Iyzipay\Model\ResourceModel\IyziOrderJob\Collection as IyziOrderJobCollection;
@@ -69,7 +69,7 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
     protected $messageManager;
     protected StoreManagerInterface $storeManager;
     protected PriceHelper $priceHelper;
-    protected IyziLogger $iyziLogger;
+    protected IyziErrorLogger $errorLogger;
     protected ResponseObjectHelper $responseObjectHelper;
     protected IyziOrderJobCollection $iyziOrderJobCollection;
     protected WebhookHelperFactory $webhookHelperFactory;
@@ -90,7 +90,7 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
         ManagerInterface $messageManager,
         StoreManagerInterface $storeManager,
         PriceHelper $priceHelper,
-        IyziLogger $iyziLogger,
+        IyziErrorLogger $errorLogger,
         ResponseObjectHelper $responseObjectHelper,
         IyziOrderJobCollection $iyziOrderJobCollection,
         WebhookHelperFactory $webhookHelperFactory,
@@ -109,7 +109,7 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
         $this->messageManager = $messageManager;
         $this->storeManager = $storeManager;
         $this->priceHelper = $priceHelper;
-        $this->iyziLogger = $iyziLogger;
+        $this->errorLogger = $errorLogger;
         $this->responseObjectHelper = $responseObjectHelper;
         $this->iyziOrderJobCollection = $iyziOrderJobCollection;
         $this->webhookHelperFactory = $webhookHelperFactory;
@@ -129,7 +129,7 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
     public function createCsrfValidationException(RequestInterface $request): ?InvalidRequestException
     {
         $params = $request->getParams();
-        $this->iyziLogger->critical("createCsrfValidationException: " . json_encode($params), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+        $this->errorLogger->critical("createCsrfValidationException: " . json_encode($params), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
         return null;
     }
 
@@ -161,9 +161,6 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
      */
     public function response()
     {
-
-        // Job Oluşturulacak. Job'da token'a göre order_id bulunacak. Order bulunacak. Order'ın status'ü güncellenecek.
-
         try {
             $token = $this->getToken();
             $orderId = $this->findParametersByToken($token, 'order_id');
@@ -172,7 +169,7 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
 
             $this->updateOrderPaymentStatus($orderId, $response);
 
-             if ($this->getUserId() != 0) {
+            if ($this->getUserId() != 0) {
                 $this->setUserCard($response);
             }
 
@@ -192,7 +189,7 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
             return $resultRedirect->setPath('checkout/onepage/success', ['_secure' => true]);
 
         } catch (Exception $e) {
-            $this->iyziLogger->critical("execute error: " . $e->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+            $this->errorLogger->critical("execute error: " . $e->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
             $this->messageManager->addErrorMessage(__('An error occurred while processing your payment. Please try again.'));
             $resultRedirect = $this->resultRedirectFactory->create();
             return $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
@@ -240,16 +237,19 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
         if ($paymentStatus == 'PENDING_CREDIT' && $status == 'success') {
             $order->setState("pending_payment")->setStatus("pending_payment");
             $order->addStatusHistoryComment(__("PENDING_CREDIT"));
+            $this->setOrderJobStatus($orderId, "pending_payment");
         }
 
         if ($paymentStatus == 'INIT_BANK_TRANSFER' && $status == 'success') {
             $order->setState("pending_payment")->setStatus("pending_payment");
             $order->addStatusHistoryComment(__("INIT_BANK_TRANSFER"));
+            $this->setOrderJobStatus($orderId, "pending_payment");
         }
 
         if ($paymentStatus == 'SUCCESS' && $status == 'success') {
             $order->setState("processing")->setStatus("processing");
             $order->addStatusHistoryComment(__("SUCCESS"));
+            $this->setOrderJobStatus($orderId, "processing");
         }
 
         if ($response->installment > 1) {
@@ -289,6 +289,7 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
         }
 
         $order->save();
+        $this->setOrderJobStatus($orderId, $orderStatusDetails['state'] ?? $defaultState);
     }
 
     /**
@@ -318,7 +319,7 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
         try {
             return $this->orderRepository->get($orderId);
         } catch (NoSuchEntityException $e) {
-            $this->iyziLogger->critical("findOrderById: $orderId - Message: " . $e->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+            $this->errorLogger->critical("findOrderById: $orderId - Message: " . $e->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
             return null;
         }
     }
@@ -424,7 +425,27 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
         try {
             $iyziOrder->save();
         } catch (Throwable $th) {
-            $this->iyziLogger->critical("setIyziOrder: " . $th->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+            $this->errorLogger->critical("setIyziOrder: " . $th->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+        }
+    }
+
+    /**
+     * Set Iyzipay Order Job
+     *
+     * This function is responsible for saving the iyzi order job.
+     *
+     * @param string $orderId
+     * @param string $status
+     * @return void
+     */
+    private function setOrderJobStatus(string $orderId, string $status)
+    {
+        $iyziOrderJob = $this->iyziOrderJobCollection->addFieldToFilter('order_id', $orderId)->getFirstItem();
+        $iyziOrderJob->setStatus($status);
+        try {
+            $iyziOrderJob->save();
+        } catch (Throwable $th) {
+            $this->errorLogger->critical("setIyziOrderJob: " . $th->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
         }
     }
 
@@ -436,7 +457,7 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
      * @param string $token
      * @return object
      */
-    private function getPaymentDetail(string $token)
+    public function getPaymentDetail(string $token)
     {
         $defination = $this->getPaymentDefinition();
         $pkiStringBuilder = $this->getPkiStringBuilder();
@@ -562,7 +583,7 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
             $errorCode = ErrorCode::from($response->errorCode);
             $errorMessage = $errorCode->getErrorMessage();
             $webhookHelper->webhookHttpResponse($response->errorCode . '-' . $errorMessage, 404);
-            $this->iyziLogger->critical("handleWebhookError: " . $response->errorCode . '-' . $errorMessage, ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+            $this->errorLogger->critical("handleWebhookError: " . $response->errorCode . '-' . $errorMessage, ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
         }
     }
 
@@ -580,7 +601,7 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
         $errorCode = ErrorCode::from($response->errorCode);
         $errorMessage = $errorCode->getErrorMessage();
 
-        $this->iyziLogger->critical("handleError: " . $response->errorCode . '-' . $errorMessage, ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+        $this->errorLogger->critical("handleError: " . $response->errorCode . '-' . $errorMessage, ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
 
         $this->messageManager->addError($errorMessage);
         return $resultRedirect->setPath('checkout/cart', ['_secure' => true]);

@@ -21,6 +21,9 @@
 "CREDIT_PAYMENT_AUTH_FAILURE", "Alışveriş kredisi ödemesi başarısız."
 "BANK_TRANSFER_AUTH_SUCCESS", "Banka havalesi ödemesi başarılı."
 "RECEIVED_ORDER", "Sipariş alındı."
+"CANCELLED_ORDER", "Sipariş iptal edildi."
+
+"INIT_THREEDS", "3D güvenlik işlemi başlatıldı."
 
 "NOT_SUFFICIENT_FUNDS", "Kart limiti yetersiz, yetersiz bakiye"
 "DO_NOT_HONOUR", "İşlem onaylanmadı"
