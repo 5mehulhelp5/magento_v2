@@ -40,21 +40,18 @@ class Request
 
         $webhookUrlKey = $this->scopeConfig->getValue('payment/iyzipay/webhook_url_key');
 
-        $this->logger->info('request.php 2: ', [
-            'subject' => $subject,
-            'url' => $subject->getRequestUri(),
-            'webhookUrlKey' => $webhookUrlKey
+        $this->logger->info('request.php if öncesi: ', [
+            'result' => $result,
         ]);
 
 
         if ($subject->getRequestUri() === ('/rest/v1/iyzico/webhook/' . $webhookUrlKey) || $subject->getRequestUri() === '/index.php/rest/V1/iyzico/callback/') {
             $result = ['text/html'];
-
-            $this->logger->info('if çalıştı: ', [
-                'subject' => $subject->getRequestUri(),
-                'result' => $result
-            ]);
         }
+
+        $this->logger->info('request.php if sonrası: ', [
+            'result' => $result,
+        ]);
 
         return $result;
     }
