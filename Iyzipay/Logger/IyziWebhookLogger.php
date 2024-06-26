@@ -23,14 +23,14 @@
 namespace Iyzico\Iyzipay\Logger;
 
 use Monolog\Logger;
+use Iyzico\Iyzipay\Logger\Handler\IyziWebhookHandler;
 
-class IyziLogger extends Logger
+
+class IyziWebhookLogger extends Logger
 {
-    public function __construct(
-        $name,
-        array $handlers = [],
-        array $processors = []
-    ) {
-        parent::__construct($name, $handlers, $processors);
+    public function __construct(IyziWebhookHandler $handler, array $processors = [])
+    {
+        parent::__construct('iyzipay_webhook', [$handler], $processors);
     }
 }
+

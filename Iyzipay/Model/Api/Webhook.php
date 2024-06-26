@@ -7,6 +7,7 @@ use Iyzico\Iyzipay\Controller\Response\IyzipayResponse;
 use Iyzico\Iyzipay\Helper\WebhookHelper;
 use Iyzico\Iyzipay\Infrastructure\Contracts\WebhookInterface;
 use Iyzico\Iyzipay\Logger\IyziErrorLogger;
+use Iyzico\Iyzipay\Logger\IyziWebhookLogger;
 use stdClass;
 
 /**
@@ -21,6 +22,7 @@ class Webhook implements WebhookInterface
     private WebhookHelper $webhookHelper;
     private IyzipayResponse $iyzipayResponse;
     private IyziErrorLogger $logger;
+    private IyziWebhookLogger $webhookLogger;
 
     /**
      * Constructor
@@ -30,11 +32,12 @@ class Webhook implements WebhookInterface
      * @param IyzipayResponse $iyzipayResponse
      * @param IyziErrorLogger $logger
      */
-    public function __construct(WebhookHelper $webhookHelper, IyzipayResponse $iyzipayResponse, IyziErrorLogger $logger)
+    public function __construct(WebhookHelper $webhookHelper, IyzipayResponse $iyzipayResponse, IyziErrorLogger $logger, IyziWebhookLogger $webhookLogger)
     {
         $this->webhookHelper = $webhookHelper;
         $this->iyzipayResponse = $iyzipayResponse;
         $this->logger = $logger;
+        $this->webhookLogger = $webhookLogger;
     }
 
     /**
@@ -45,7 +48,10 @@ class Webhook implements WebhookInterface
      */
     public function getResponse(string $webhookUrlKey): void
     {
+
+        $this->webhookLogger->info("Webhook URL Key: {$webhookUrlKey}");
         $expectedWebhookUrlKey = $this->webhookHelper->getWebhookUrl();
+        $this->webhookLogger->info("Expected Webhook URL Key: {$expectedWebhookUrlKey}");
 
         if ($webhookUrlKey != $expectedWebhookUrlKey) {
             $this->logger->error("Error: '{$webhookUrlKey}' is not a valid webhook URL key. Expected: '{$expectedWebhookUrlKey}'.");
