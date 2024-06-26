@@ -90,9 +90,11 @@ class ProcessPendingOrders
 
             $order = $this->collection->addFieldToFilter('id', $order['id'])->getFirstItem();
 
-            $this->updateOrder($order, $responseBody);
-            $this->updateLastControlDate($order);
-            $this->updateControlled($order);
+            $order = $this->updateOrder($order, $responseBody);
+            $order = $this->updateLastControlDate($order);
+            $order = $this->updateControlled($order);
+
+            $order->save();
         }
 
         return [];
@@ -100,21 +102,28 @@ class ProcessPendingOrders
 
     private function all()
     {
-        $this->collection->addFieldToFilter('status', ['in' => ['pending_payment', 'received']]);
-        $this->collection->addFieldToFilter('is_controlled', ['eq' => 0]);
+        $fiveMinutesAgo = date('Y-m-d H:i:s', strtotime('-5 minutes'));
 
-        foreach ($this->collection as $order) {
-            $array[] = $order->getData();
-        }
+        $this->collection->addFieldToFilter('status', ['in' => ['pending_payment', 'received']])
+            ->addFieldToFilter('is_controlled', ['eq' => 0])
+            ->addFieldToFilter(
+                ['last_controlled_at', 'last_controlled_at'],
+                [
+                    ['lt' => $fiveMinutesAgo],
+                    ['null' => true]
+                ]
+            );
 
-        return $array ?? [];
+        return $this->collection->getData();
     }
 
     private function updateControlled($order)
     {
-        $order->getStatus() == 'canceled' ? $order->setIsControlled(1) : $order->setIsControlled(0);
-        $order->getStatus() == 'processing' ? $order->setIsControlled(1) : $order->setIsControlled(0);
-        $order->save();
+        if ($order->getStatus() == 'canceled' || $order->getStatus() == 'processing') {
+            $order->setIsControlled(1);
+        }
+
+        return $order;
     }
 
     private function updateLastControlDate($order)
@@ -130,7 +139,7 @@ class ProcessPendingOrders
             'new_last_control_date' => $newLastControlledAt
         ]);
 
-        $order->save();
+        return $order;
     }
 
     private function validateConversationId(string $conversationId, string $responseConversationId)
@@ -170,6 +179,8 @@ class ProcessPendingOrders
         $magentoOrder->setStatus($mapping['status']);
         $magentoOrder->addStatusHistoryComment($mapping['comment']);
 
+        $magentoOrder->save();
+
         $this->cronLogger->info('Order status updated', [
             'order_id' => $order->getOrderId(),
             'state' => $mapping['state'],
@@ -177,8 +188,7 @@ class ProcessPendingOrders
             'comment' => $mapping['comment']
         ]);
 
-        $order->save();
-        $magentoOrder->save();
+        return $order;
     }
 
     private function mapping(string $paymentStatus, string $status): array

@@ -44,31 +44,25 @@ class Webhook implements WebhookInterface
      * Get the response from the webhook URL key.
      *
      * @param string $webhookUrlKey The webhook URL key to get the response for.
-     * @return void
      */
-    public function getResponse(string $webhookUrlKey): void
+    public function getResponse($webhookUrlKey)
     {
-
         $this->webhookLogger->info("Webhook URL Key: {$webhookUrlKey}");
         $expectedWebhookUrlKey = $this->webhookHelper->getWebhookUrl();
-        $this->webhookLogger->info("Expected Webhook URL Key: {$expectedWebhookUrlKey}");
 
         if ($webhookUrlKey != $expectedWebhookUrlKey) {
             $this->logger->error("Error: '{$webhookUrlKey}' is not a valid webhook URL key. Expected: '{$expectedWebhookUrlKey}'.");
             $this->webhookHelper->webhookHttpResponse("Error: Webhook URL Key", 404);
         }
 
-        try {
-            $body = file_get_contents('php://input');
-            $response = json_decode($body);
-        } catch (Exception $e) {
-            $this->logger->error("Error:" . $e->getMessage());
-            $this->webhookHelper->webhookHttpResponse("Error:" . $e->getMessage(), 400);
-        }
+        $body = @file_get_contents('php://input');
+        $response = json_decode($body);
 
-        if (isset($response->iyziEventType) && isset($response->token) && isset($response->paymentConversationId)) {
-            $signature = base64_encode(sha1($this->webhookHelper->getSecretKey() . $response->iyziEventType . $response->token, true));
-            if ($signature) {
+        if (isset($response->iyziEventType) && isset($response->token)) {
+            $token = $response->token;
+            $iyziEventType = $response->iyziEventType;
+            $createIyzicoSignature = base64_encode(sha1($this->webhookHelper->getSecretKey() . $iyziEventType . $token, true));
+            if ($createIyzicoSignature) {
                 $this->getHttpResponse($response);
             } else {
                 $this->logger->error("Error: X-IYZ-SIGNATURE is not valid.");
@@ -78,6 +72,7 @@ class Webhook implements WebhookInterface
             $this->logger->error("Error: Invalid parameters provided.");
             $this->webhookHelper->webhookHttpResponse("Error: Invalid parameters provided.", 404);
         }
+
     }
 
     /**
@@ -88,6 +83,7 @@ class Webhook implements WebhookInterface
      */
     public function getHttpResponse(stdClass $response): void
     {
+        $this->webhookLogger->info("Webhook Response: ", (array) $response);
         if (!isset($response->iyziEventType) || !isset($response->token) || !isset($response->paymentConversationId)) {
             $this->logger->error("Error: iyziEventType, token, paymentConversationId not found in the response");
             $this->webhookHelper->webhookHttpResponse("Error: iyziEventType, token, paymentConversationId not found in the response", 404);
