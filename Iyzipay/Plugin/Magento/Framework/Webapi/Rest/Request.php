@@ -27,7 +27,7 @@ class Request
     public function __construct(IyziWebhookLogger $logger, ScopeConfigInterface $scopeConfig)
     {
         $this->logger = $logger;
-        $this->_scopeConfig = $scopeConfig;
+        $this->scopeConfig = $scopeConfig;
     }
 
     /**
