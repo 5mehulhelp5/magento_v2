@@ -116,7 +116,7 @@ class IyzipayConfigSaveBefore implements ObserverInterface
           $webhook_url_key = $this->_scopeConfig->getValue('payment/iyzipay/webhook_url_key');
 
           $setWebhookUrl = new stdClass();
-          $setWebhookUrl->webhookUrl = $this->_storeManager->getStore()->getBaseUrl().'rest/V1/iyzico/webhook/'.$webhook_url_key;
+          $setWebhookUrl->webhookUrl = $this->_storeManager->getStore()->getBaseUrl().'rest/v1/iyzico/webhook/'.$webhook_url_key;
 
           $iyzicoPkiStringBuilder = new IyzicoPkiStringBuilder();
           $iyzicoRequest = new IyzicoRequest();

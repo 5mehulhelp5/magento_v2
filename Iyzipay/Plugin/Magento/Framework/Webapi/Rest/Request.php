@@ -31,19 +31,17 @@ class Request
      */
     public function afterGetAcceptTypes(RestRequest $subject, array $result): array
     {
-        $this->logger->info('afterGetAcceptTypes: ', [
-            'accept_types' => $result,
-            'request_uri' => $subject->getRequestUri(),
-            'time' => date('Y-m-d H:i:s'),
+        $this->logger->info('requst.php', [
+            'subject' => $subject,
+            'result' => $result
         ]);
 
-        if ($subject->getRequestUri() === '/rest/V1/iyzico/webhook/' || $subject->getRequestUri() === '/index.php/rest/V1/iyzico/callback/') {
+        if ($subject->getRequestUri() === '/rest/v1/iyzico/webhook/' || $subject->getRequestUri() === '/index.php/rest/V1/iyzico/callback/') {
             $result = ['text/html'];
 
-            $this->logger->info('afterGetAcceptTypes: ', [
-                'accept_types' => $result,
-                'request_uri' => $subject->getRequestUri(),
-                'time' => date('Y-m-d H:i:s'),
+            $this->logger->info('if çalıştı: ', [
+                'subject' => $subject->getRequestUri(),
+                'result' => $result
             ]);
         }
 
