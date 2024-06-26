@@ -206,8 +206,6 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
      */
     public function webhook(string $token, string $iyziEventType)
     {
-        $this->errorLogger->info("Webhook URL Key: {$token}");
-
         $orderId = $this->findParametersByToken($token, 'order_id');
         $response = $this->getPaymentDetail($token);
 

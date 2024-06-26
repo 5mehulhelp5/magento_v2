@@ -13,7 +13,7 @@
     <!-- IyzipayOrderTotalsTemplate -->
     <preference for="Magento\Sales\Block\Order\Totals" type="Iyzico\Iyzipay\Block\Order\IyzipayOrderTotals"/>
     <!-- IyzipayOrderInvoiceTotalsTemplate -->
-    <preference for="Iyzico\Iyzipay\Infrastructure\Contracts\WebhookInterface" type="Iyzico\Iyzipay\Model\Api\Webhook"/>
+    <preference for="Iyzico\Iyzipay\Api\WebhookInterface" type="Iyzico\Iyzipay\Model\Api\Webhook"/>
     <!-- Helper Injections -->
     <type name="Iyzico\Iyzipay\Helper\ObjectHelper">
         <arguments>

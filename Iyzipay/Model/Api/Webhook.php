@@ -2,10 +2,9 @@
 
 namespace Iyzico\Iyzipay\Model\Api;
 
-use Exception;
 use Iyzico\Iyzipay\Controller\Response\IyzipayResponse;
 use Iyzico\Iyzipay\Helper\WebhookHelper;
-use Iyzico\Iyzipay\Infrastructure\Contracts\WebhookInterface;
+use Iyzico\Iyzipay\Api\WebhookInterface;
 use Iyzico\Iyzipay\Logger\IyziErrorLogger;
 use Iyzico\Iyzipay\Logger\IyziWebhookLogger;
 use stdClass;
@@ -47,30 +46,39 @@ class Webhook implements WebhookInterface
      */
     public function getResponse($webhookUrlKey)
     {
-        $this->webhookLogger->info("Webhook URL Key: {$webhookUrlKey}");
         $expectedWebhookUrlKey = $this->webhookHelper->getWebhookUrl();
+
+        $this->webhookLogger->info("getResponse çalıştı", [
+            'webhookUrlKey' => $webhookUrlKey,
+            'expectedWebhookUrlKey' => $expectedWebhookUrlKey
+        ]);
 
         if ($webhookUrlKey != $expectedWebhookUrlKey) {
             $this->logger->error("Error: '{$webhookUrlKey}' is not a valid webhook URL key. Expected: '{$expectedWebhookUrlKey}'.");
-            $this->webhookHelper->webhookHttpResponse("Error: Webhook URL Key", 404);
+            return $this->webhookHelper->webhookHttpResponse("Error: Webhook URL Key", 404);
         }
 
         $body = @file_get_contents('php://input');
         $response = json_decode($body);
+
+        $this->webhookLogger->info("webhookUrlKey ve expectedWebhookUrlKey Eşit", [
+            'body' => $body,
+            'response' => $response
+        ]);
 
         if (isset($response->iyziEventType) && isset($response->token)) {
             $token = $response->token;
             $iyziEventType = $response->iyziEventType;
             $createIyzicoSignature = base64_encode(sha1($this->webhookHelper->getSecretKey() . $iyziEventType . $token, true));
             if ($createIyzicoSignature) {
-                $this->getHttpResponse($response);
+                return $this->getHttpResponse($response);
             } else {
                 $this->logger->error("Error: X-IYZ-SIGNATURE is not valid.");
-                $this->webhookHelper->webhookHttpResponse("Error: X-IYZ-SIGNATURE is not valid.", 404);
+                return $this->webhookHelper->webhookHttpResponse("Error: X-IYZ-SIGNATURE is not valid.", 404);
             }
         } else {
             $this->logger->error("Error: Invalid parameters provided.");
-            $this->webhookHelper->webhookHttpResponse("Error: Invalid parameters provided.", 404);
+            return $this->webhookHelper->webhookHttpResponse("Error: Invalid parameters provided.", 404);
         }
 
     }
@@ -79,15 +87,14 @@ class Webhook implements WebhookInterface
      * Get the HTTP response based on the webhook response.
      *
      * @param stdClass $response The webhook response object.
-     * @return void The HTTP response.
      */
-    public function getHttpResponse(stdClass $response): void
+    public function getHttpResponse(stdClass $response)
     {
         $this->webhookLogger->info("Webhook Response: ", (array) $response);
         if (!isset($response->iyziEventType) || !isset($response->token) || !isset($response->paymentConversationId)) {
             $this->logger->error("Error: iyziEventType, token, paymentConversationId not found in the response");
-            $this->webhookHelper->webhookHttpResponse("Error: iyziEventType, token, paymentConversationId not found in the response", 404);
+            return $this->webhookHelper->webhookHttpResponse("Error: iyziEventType, token, paymentConversationId not found in the response", 404);
         }
-        $this->iyzipayResponse->webhook($response->token, $response->iyziEventType);
+        return $this->iyzipayResponse->webhook($response->token, $response->iyziEventType);
     }
 }

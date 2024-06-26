@@ -70,6 +70,7 @@ class WebhookHelper
      *
      * @param  $message
      * @param  $status
+     * @return mixed
      */
     public function webhookHttpResponse($message, $status)
     {
