@@ -31,9 +31,9 @@ class Request
      */
     public function afterGetAcceptTypes(RestRequest $subject, array $result): array
     {
-        $this->logger->info('requst.php', [
+        $this->logger->info('request.php 2: ', [
             'subject' => $subject,
-            'result' => $result
+            'subject->getRequestUri()' => $subject->getRequestUri()
         ]);
 
         if ($subject->getRequestUri() === '/rest/v1/iyzico/webhook/' || $subject->getRequestUri() === '/index.php/rest/V1/iyzico/callback/') {
