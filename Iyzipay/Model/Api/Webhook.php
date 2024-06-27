@@ -48,11 +48,6 @@ class Webhook implements WebhookInterface
     {
         $expectedWebhookUrlKey = $this->webhookHelper->getWebhookUrl();
 
-        $this->webhookLogger->info("getResponse çalıştı", [
-            'webhookUrlKey' => $webhookUrlKey,
-            'expectedWebhookUrlKey' => $expectedWebhookUrlKey
-        ]);
-
         if ($webhookUrlKey != $expectedWebhookUrlKey) {
             $this->logger->error("Error: '{$webhookUrlKey}' is not a valid webhook URL key. Expected: '{$expectedWebhookUrlKey}'.");
             return $this->webhookHelper->webhookHttpResponse("Error: Webhook URL Key", 404);
@@ -60,11 +55,6 @@ class Webhook implements WebhookInterface
 
         $body = @file_get_contents('php://input');
         $response = json_decode($body);
-
-        $this->webhookLogger->info("webhookUrlKey ve expectedWebhookUrlKey Eşit", [
-            'body' => $body,
-            'response' => $response
-        ]);
 
         if (isset($response->iyziEventType) && isset($response->token)) {
             $token = $response->token;

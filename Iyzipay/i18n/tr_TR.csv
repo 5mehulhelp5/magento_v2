@@ -68,3 +68,11 @@
 "Every 12 Hours", "Her 12 Saat"
 "Every Day at Midnight", "Her Gün Gece Yarısı"
 "Custom", "Özel"
+
+"SORRY_MESSAGE", "Özür dileriz, işleminiz sırasında bir sorun oluştu."
+"ERROR_CODE", "Hata Kodu: "
+"ERROR_MESSAGE", "Hata Mesajı: "
+"REDIRECT_MESSAGE", "Lütfen bekleyiniz. Sepete yönlendiriliyorsunuz. Kalan süre: ",
+"SECOND", "saniye"
+"RETURN_HOME", "Ana Sayfaya Dön"
+"RETURN_CART", "Sepete Dön"

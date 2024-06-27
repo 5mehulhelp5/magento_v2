@@ -69,3 +69,10 @@
 "Every Day at Midnight", "Every Day at Midnight"
 "Custom", "Custom"
 
+"SORRY_MESSAGE", "Sorry, an error occurred during the payment process."
+"ERROR_CODE", "Error Code: "
+"ERROR_MESSAGE", "Error Message: "
+"REDIRECT_MESSAGE", "Please wait. You are directed to the cart. Remaining time:"
+"SECOND", "second"
+"RETURN_HOME", "Return to Home"
+"RETURN_CART", "Return to Cart"

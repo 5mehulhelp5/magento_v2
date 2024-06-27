@@ -399,9 +399,9 @@ class IyzipayRequest extends Action
         $this->errorLogger->critical("result must be an array.", ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
         return [
             'success' => false,
-            'redirect' => 'checkout/error',
-            'errorCode' => '0',
-            'errorMessage' => 'Check the Logs for more information.'
+            'redirect' => 'iyzipay/error',
+            'code' => '0',
+            'message' => 'Check the Logs for more information.'
         ];
     }
 
@@ -499,9 +499,9 @@ class IyzipayRequest extends Action
 
         return [
             'success' => false,
-            'redirect' => 'checkout/error',
-            'errorCode' => $requestResponse->errorCode,
-            'errorMessage' => $requestResponse->errorMessage
+            'redirect' => 'iyzipay/error',
+            'code' => $requestResponse->errorCode,
+            'message' => $requestResponse->errorMessage
         ];
     }
 
@@ -521,9 +521,9 @@ class IyzipayRequest extends Action
 
         return [
             'success' => false,
-            'redirect' => 'checkout/error',
-            'errorCode' => '0',
-            'errorMessage' => 'Check the Logs for more information.'
+            'redirect' => 'iyzipay/error',
+            'code' => '0',
+            'message' => 'Check the Logs for more information.'
         ];
     }
 

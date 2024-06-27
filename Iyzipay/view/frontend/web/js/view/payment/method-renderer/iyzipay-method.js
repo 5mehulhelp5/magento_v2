@@ -22,32 +22,32 @@ define(
             getInstructions: function () {
                 return window.checkoutConfig.payment.instructions[this.item.method];
             },
-            payWithIyzico: function (){
+            payWithIyzico: function () {
                 var quoteEmail, guestQuoteId = false;
 
-                if(!additionalValidators.validate()) {   //Resolve checkout aggreement accept error
+                if (!additionalValidators.validate()) {   //Resolve checkout aggreement accept error
                     return false;
                 }
 
-                $(document).ready(function() {
+                $(document).ready(function () {
 
                     $("#loadingBar").show();
 
-                    if(!customer.isLoggedIn()) {
+                    if (!customer.isLoggedIn()) {
                         quoteEmail = quote.guestEmail;
                         guestQuoteId = quote.getQuoteId();
                     }
 
                     $.ajax({
                         url: urlBuilder.build("Iyzico_Iyzipay/request/iyzipayrequest"),
-                        data: {iyziQuoteEmail: quoteEmail, iyziQuoteId: guestQuoteId},
+                        data: { iyziQuoteEmail: quoteEmail, iyziQuoteId: guestQuoteId },
                         type: "post",
                         dataType: "json",
                         success: function (response) {
                             if (response.success) {
                                 window.location.href = response.url;
                             } else {
-                                window.location.href = urlBuilder.build(response.redirect + '?errorCode=' + response.errorCode + '&errorMessage=' + encodeURIComponent(response.errorMessage));
+                                window.location.href = urlBuilder.build(response.redirect + '?code=' + response.code + '&message=' + encodeURIComponent(response.message));
                             }
                         },
                         error: function () {

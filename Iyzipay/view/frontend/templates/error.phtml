@@ -1,3 +1,88 @@
-<p><?= __('Error Code:') ?> <?= $block->getData('error_code') ?></p>
-<p><?= __('Error Message:') ?> <?= $block->getData('error_message') ?></p>
-<a href="javascript:history.back()"><?= __('Back') ?></a>
+<?php
+/** @var \Iyzico\Iyzipay\Block\Checkout\Error $block */
+?>
+
+<style>
+    .iyzipay-logo {
+        max-width: 150px;
+        margin-bottom: 20px;
+    }
+
+    .iyzipay-error-details {
+        background-color: #f8f8f8;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 20px;
+        text-align: left;
+    }
+
+    .iyzipay-error-code,
+    .iyzipay-error-message {
+        margin: 10px 0;
+        color: #333;
+    }
+
+    .iyzipay-actions {
+        margin-top: 30px;
+    }
+
+    .iyzipay-btn:hover {
+        background-color: #005ea6;
+    }
+
+    #iyzipay-countdown {
+        font-size: 18px;
+        font-weight: bold;
+        color: #0070ba;
+        margin-top: 20px;
+    }
+</style>
+
+<div class="iyzipay-error-container">
+    <h2><?= $block->escapeHtml(__('SORRY_MESSAGE')) ?></h2>
+    <div class="iyzipay-error-details">
+        <p class="iyzipay-error-code">
+            <strong>
+                <?= $block->escapeHtml(__('ERROR_CODE')) ?>
+            </strong>
+            <?= $block->escapeHtml($block->getErrorCode()) ?>
+        </p>
+        <p class="iyzipay-error-message">
+            <strong>
+                <?= $block->escapeHtml(__('ERROR_MESSAGE')) ?>
+            </strong>
+            <?= $block->escapeHtml($block->getErrorMessage()) ?>
+        </p>
+    </div>
+    <p>
+        <?= $block->escapeHtml(__('REDIRECT_MESSAGE')) ?>
+        <span id="iyzipay-countdown">60</span>
+        <?= $block->escapeHtml(__('SECOND')) ?>
+    </p>
+    <div class="iyzipay-actions">
+        <a href="<?= $block->escapeUrl($block->getUrl('')) ?>">
+            <?= $block->escapeHtml(__('RETURN_HOME')) ?>
+        </a>
+        <a style="margin-left: 10px;" href="<?= $block->escapeUrl($block->getCartUrl()) ?>">
+            <?= $block->escapeHtml(__('RETURN_CART')) ?>
+        </a>
+    </div>
+</div>
+
+<script>
+    require(['jquery'], function ($) {
+        var timeleft = 60;
+        var redirectUrl = '<?= $block->escapeUrl($block->getCartUrl()) ?>';
+        var countdownElement = $('#iyzipay-countdown');
+
+        var downloadTimer = setInterval(function () {
+            if (timeleft <= 0) {
+                clearInterval(downloadTimer);
+                window.location.href = redirectUrl;
+            } else {
+                countdownElement.text(timeleft);
+            }
+            timeleft -= 1;
+        }, 1000);
+    });
+</script>

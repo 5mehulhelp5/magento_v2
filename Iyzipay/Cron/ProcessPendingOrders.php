@@ -102,17 +102,9 @@ class ProcessPendingOrders
 
     private function all()
     {
-        $fiveMinutesAgo = date('Y-m-d H:i:s', strtotime('-5 minutes'));
-
-        $this->collection->addFieldToFilter('status', ['in' => ['pending_payment', 'received']])
-            ->addFieldToFilter('is_controlled', ['eq' => 0])
-            ->addFieldToFilter(
-                ['last_controlled_at', 'last_controlled_at'],
-                [
-                    ['lt' => $fiveMinutesAgo],
-                    ['null' => true]
-                ]
-            );
+        $this->collection
+            ->addFieldToFilter('status', ['in' => ['pending_payment', 'received']])
+            ->addFieldToFilter('is_controlled', ['eq' => 0]);
 
         return $this->collection->getData();
     }

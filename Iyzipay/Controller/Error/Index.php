@@ -2,58 +2,54 @@
 
 namespace Iyzico\Iyzipay\Controller\Error;
 
+use Magento\Framework\App\Action\Action;
 use Magento\Framework\App\Action\Context;
 use Magento\Framework\View\Result\PageFactory;
-use Magento\Framework\App\Action\Action;
-use Magento\Framework\View\Result\Page;
+use Magento\Framework\View\Asset\Repository;
+use Magento\Framework\App\State;
 
-/**
- * Class Index
- *
- * This class is used to display error messages in the frontend.
- *
- * @package Iyzico\Iyzipay\Controller\Error
- * @extends Action
- */
 class Index extends Action
 {
-    /**
-     * PageFactory Instance
-     *
-     * @var PageFactory $_resultPageFactory
-     */
-    protected PageFactory $_resultPageFactory;
+    protected $resultPageFactory;
+    protected $assetRepository;
+    protected $appState;
 
-    /**
-     * Error Index Constructor
-     *
-     * @param Context $context
-     * @param PageFactory $resultPageFactory
-     * @return void
-     */
-    public function __construct(Context $context, PageFactory $resultPageFactory)
-    {
-        $this->resultPag_resultPageFactoryeFactory = $resultPageFactory;
+    public function __construct(
+        Context $context,
+        PageFactory $resultPageFactory,
+        Repository $assetRepository,
+        State $appState
+    ) {
+        $this->resultPageFactory = $resultPageFactory;
+        $this->assetRepository = $assetRepository;
+        $this->appState = $appState;
         parent::__construct($context);
     }
 
-    /**
-     * Execute Method
-     *
-     * This method is used to display error messages in the frontend.
-     *
-     * @return Page
-     */
     public function execute()
     {
-        $errorCode = $this->getRequest()->getParam('errorCode', 'Unknown Error Code');
-        $errorMessage = $this->getRequest()->getParam('errorMessage', 'Unknown Error Message');
+        $resultPage = $this->resultPageFactory->create();
+        $resultPage->getConfig()->getTitle()->set(__('Iyzipay Error'));
 
-        $resultPage = $this->_resultPageFactory->create();
-        $resultPage->getLayout()->getBlock('error_page')
-            ->setData('error_code', $errorCode)
-            ->setData('error_message', $errorMessage);
+        $errorCode = $this->getRequest()->getParam('code');
+        $errorMessage = $this->getRequest()->getParam('message');
+
+        $block = $resultPage->getLayout()->getBlock('iyzipay_error');
+
+        if ($block) {
+            $block->setErrorCode($errorCode);
+            $block->setErrorMessage($errorMessage);
+            $block->setLogoUrl($this->getLogoUrl());
+        }
 
         return $resultPage;
+    }
+
+    protected function getLogoUrl()
+    {
+        $params = [
+            'area' => $this->appState->getAreaCode()
+        ];
+        return $this->assetRepository->getUrlWithParams('Iyzico_Iyzipay::iyzico/iyzico_logo.png', $params);
     }
 }
