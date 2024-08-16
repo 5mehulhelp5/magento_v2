@@ -28,20 +28,26 @@ use Magento\Framework\Data\Form\Element\AbstractElement;
 use Magento\Framework\Exception\NoSuchEntityException;
 use Magento\Store\Model\ScopeInterface;
 use Magento\Store\Model\StoreManagerInterface;
+use Magento\Backend\Block\Template\Context;
+use Magento\Framework\App\Config\ScopeConfigInterface;
+use Iyzico\Iyzipay\Logger\IyziErrorLogger;
 
 class IyzipayWebhookField extends Field
 {
     protected $storeManager;
     protected $scopeConfig;
+    protected $logger;
 
     public function __construct(
-        \Magento\Backend\Block\Template\Context $context,
+        Context $context,
         StoreManagerInterface $storeManager,
-        \Magento\Framework\App\Config\ScopeConfigInterface $scopeConfig,
+        ScopeConfigInterface $scopeConfig,
+        IyziErrorLogger $logger,
         array $data = []
     ) {
         $this->storeManager = $storeManager;
         $this->scopeConfig = $scopeConfig;
+        $this->logger = $logger;
         parent::__construct($context, $data);
     }
 
@@ -61,6 +67,8 @@ class IyzipayWebhookField extends Field
             ScopeInterface::SCOPE_STORE,
             $this->getStoreId()
         );
+
+        $this->logger->info('Webhook URL Key: ' . $webhookUrlKey);
 
         if ($webhookUrlKey) {
             $baseUrl = $this->storeManager->getStore($this->getStoreId())->getBaseUrl();
