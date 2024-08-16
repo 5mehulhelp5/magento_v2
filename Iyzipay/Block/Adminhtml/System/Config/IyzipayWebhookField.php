@@ -30,6 +30,7 @@ use Magento\Store\Model\StoreManagerInterface;
 use Magento\Store\Model\ScopeInterface;
 use Iyzico\Iyzipay\Logger\IyziErrorLogger;
 use Magento\Backend\Block\Template\Context;
+use Magento\Framework\App\Config\ScopeConfigInterface;
 /**
  * Class GetWebhookUrlField
  *
@@ -41,15 +42,18 @@ use Magento\Backend\Block\Template\Context;
 class IyzipayWebhookField extends Field
 {
     protected StoreManagerInterface $storeManager;
+    protected ScopeConfigInterface $scopeConfig;
     protected IyziErrorLogger $logger;
 
     public function __construct(
         Context $context,
         StoreManagerInterface $storeManager,
+        ScopeConfigInterface $scopeConfig,
         IyziErrorLogger $logger,
         array $data = []
     ) {
         $this->storeManager = $storeManager;
+        $this->scopeConfig = $scopeConfig;
         $this->logger = $logger;
         parent::__construct($context, $data);
     }
@@ -71,7 +75,7 @@ class IyzipayWebhookField extends Field
         $this->logger->info("Store ID: " . $this->getStoreId());
         $this->logger->info("ScopeInterface::SCOPE_STORE: " . ScopeInterface::SCOPE_STORE);
 
-        $webhookUrlKey = $this->_scopeConfig->getValue('payment/iyzipay/webhook_url_key', ScopeInterface::SCOPE_STORE, $this->getStoreId());
+        $webhookUrlKey = $this->scopeConfig->getValue('payment/iyzipay/webhook_url_key', ScopeInterface::SCOPE_STORE, $this->getStoreId());
 
         $this->logger->info("Webhook URL Key: " . $webhookUrlKey);
 
@@ -105,7 +109,7 @@ class IyzipayWebhookField extends Field
         $this->logger->info("Store ID: " . $this->getStoreId());
         $this->logger->info("ScopeInterface::SCOPE_STORE: " . ScopeInterface::SCOPE_STORE);
 
-        $isWebhookButtonActive = $this->_scopeConfig->getValue('payment/iyzipay/webhook_url_key_active', ScopeInterface::SCOPE_STORE, $this->getStoreId());
+        $isWebhookButtonActive = $this->scopeConfig->getValue('payment/iyzipay/webhook_url_key_active', ScopeInterface::SCOPE_STORE, $this->getStoreId());
 
         $this->logger->info("isWebhookButtonActive: " . $isWebhookButtonActive);
 
