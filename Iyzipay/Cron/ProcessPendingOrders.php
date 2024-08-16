@@ -28,10 +28,11 @@ use Iyzico\Iyzipay\Helper\PkiStringBuilder;
 use Iyzico\Iyzipay\Helper\PkiStringBuilderFactory;
 use Iyzico\Iyzipay\Logger\IyziCronLogger;
 use Iyzico\Iyzipay\Model\ResourceModel\IyziOrderJob\Collection;
+use Iyzico\Iyzipay\Model\ResourceModel\IyziOrderJob\CollectionFactory;
 
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Sales\Api\OrderRepositoryInterface;
-
+use Magento\Store\Model\StoreManagerInterface;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\Promise\Utils;
@@ -45,77 +46,111 @@ class ProcessPendingOrders
     protected ScopeConfigInterface $scopeConfig;
     protected PkiStringBuilderFactory $pkiStringBuilderFactory;
     protected OrderRepositoryInterface $orderRepository;
+    protected StoreManagerInterface $storeManager;
+    protected CollectionFactory $collectionFactory;
 
+    protected const PAGE_SIZE = 100; // Number of records to process per batch
 
     public function __construct(
         IyziCronLogger $cronLogger,
         Collection $collection,
         ResponseObjectHelper $responseObjectHelper,
         ScopeConfigInterface $scopeConfig,
+        StoreManagerInterface $storeManager,
         PkiStringBuilderFactory $pkiStringBuilderFactory,
-        OrderRepositoryInterface $orderRepository
+        OrderRepositoryInterface $orderRepository,
+        CollectionFactory $collectionFactory
     ) {
         $this->cronLogger = $cronLogger;
         $this->collection = $collection;
         $this->responseObjectHelper = $responseObjectHelper;
         $this->scopeConfig = $scopeConfig;
+        $this->storeManager = $storeManager;
         $this->pkiStringBuilderFactory = $pkiStringBuilderFactory;
         $this->orderRepository = $orderRepository;
+        $this->collectionFactory = $collectionFactory;
     }
 
     public function execute()
     {
-        $_orders = $this->all();
+        $page = 1;
+        $processedCount = 0;
+        $ordersToDelete = [];
+
+        do {
+            $orders = $this->getPageOfOrders($page);
+            $ordersCount = count($orders);
+
+            if ($ordersCount > 0) {
+                $this->processOrders($orders, $ordersToDelete);
+                $processedCount += $ordersCount;
+                $page++;
+            }
+
+            $this->cronLogger->info("Processed batch", [
+                'page' => $page - 1,
+                'processed_count' => $ordersCount,
+                'total_processed' => $processedCount
+            ]);
+
+        } while ($ordersCount > 0);
+
+        if (!empty($ordersToDelete)) {
+            $this->deleteProcessedOrders($ordersToDelete);
+        }
+
+        if ($processedCount == 0) {
+            $this->cronLogger->info("No orders processed in this run.");
+        } else {
+            $this->cronLogger->info("Cron job completed", ['total_processed' => $processedCount]);
+        }
+
+        return [];
+    }
+
+    private function getPageOfOrders($page)
+    {
+        $this->collection
+            ->addFieldToFilter('status', ['in' => ['pending_payment', 'received']])
+            ->addFieldToFilter('is_controlled', ['eq' => 0])
+            ->setPageSize(self::PAGE_SIZE)
+            ->setCurPage($page);
+
+        return $this->collection->getItems();
+    }
+
+    private function processOrders($orders, &$ordersToDelete)
+    {
         $promises = [];
         $client = new Client();
 
-        foreach ($_orders as $order) {
-            $token = $order['iyzico_payment_token'];
-            $conversationId = $order['iyzico_conversationId'];
-            $promises[$order['id']] = $this->getPaymentDetailAsync($client, $token, $conversationId);
+        foreach ($orders as $order) {
+            $token = $order->getIyzicoPaymentToken();
+            $conversationId = $order->getIyzicoConversationId();
+            $promises[$order->getId()] = $this->getPaymentDetailAsync($client, $token, $conversationId);
         }
 
         $responses = Utils::settle($promises)->wait();
 
-        foreach ($_orders as $order) {
-            $response = $responses[$order['id']]['value'];
+        foreach ($orders as $order) {
+            $response = $responses[$order->getId()]['value'];
             $responseBody = json_decode($response->getBody());
 
-            $conversationId = $order['iyzico_conversationId'];
+            $conversationId = $order->getIyzicoConversationId();
             $responseConversationId = $responseBody->conversationId ?? '0';
 
             if (!$this->validateConversationId($conversationId, $responseConversationId)) {
                 continue;
             }
 
-            $order = $this->collection->addFieldToFilter('id', $order['id'])->getFirstItem();
-
             $order = $this->updateOrder($order, $responseBody);
             $order = $this->updateLastControlDate($order);
-            $order = $this->updateControlled($order);
-
             $order->save();
+
+            if ($order->getStatus() == 'canceled' || $order->getStatus() == 'processing') {
+                $ordersToDelete[] = $order->getId();
+            }
         }
-
-        return [];
-    }
-
-    private function all()
-    {
-        $this->collection
-            ->addFieldToFilter('status', ['in' => ['pending_payment', 'received']])
-            ->addFieldToFilter('is_controlled', ['eq' => 0]);
-
-        return $this->collection->getData();
-    }
-
-    private function updateControlled($order)
-    {
-        if ($order->getStatus() == 'canceled' || $order->getStatus() == 'processing') {
-            $order->setIsControlled(1);
-        }
-
-        return $order;
     }
 
     private function updateLastControlDate($order)
@@ -158,10 +193,11 @@ class ProcessPendingOrders
         if (empty($mapping)) {
             $this->cronLogger->error('Mapping not found', [
                 'payment_status' => $paymentStatus,
-                'status' => $status
+                'status' => $status,
+                'order_id' => $order->getOrderId()
             ]);
 
-            return;
+            return $order;
         }
 
         $order->setStatus($mapping['status']);
@@ -181,6 +217,21 @@ class ProcessPendingOrders
         ]);
 
         return $order;
+    }
+
+    private function deleteProcessedOrders($orderIds)
+    {
+        if (empty($orderIds)) {
+            return;
+        }
+
+        $collection = $this->collectionFactory->create();
+        $collection->addFieldToFilter('id', ['in' => $orderIds]);
+
+        $deletedCount = $collection->getSize();
+        $collection->walk('delete');
+
+        $this->cronLogger->info("Bulk delete completed", ['deleted_count' => $deletedCount]);
     }
 
     private function mapping(string $paymentStatus, string $status): array
@@ -215,15 +266,15 @@ class ProcessPendingOrders
      */
     private function getPaymentDetailAsync(Client $client, string $token, string $conversationId)
     {
-        $defination = $this->getPaymentDefinition();
+        $definition = $this->getPaymentDefinition();
         $pkiStringBuilder = $this->getPkiStringBuilder();
 
         $tokenDetailObject = $this->responseObjectHelper->createTokenDetailObject($conversationId, $token);
         $iyzicoPkiString = $pkiStringBuilder->generatePkiString($tokenDetailObject);
-        $authorization = $pkiStringBuilder->generateAuthorization($iyzicoPkiString, $defination['apiKey'], $defination['secretKey'], $defination['rand']);
+        $authorization = $pkiStringBuilder->generateAuthorization($iyzicoPkiString, $definition['apiKey'], $definition['secretKey'], $definition['rand']);
         $iyzicoJson = json_encode($tokenDetailObject, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
-        $url = $defination['baseUrl'] . '/payment/iyzipos/checkoutform/auth/ecom/detail';
+        $url = $definition['baseUrl'] . '/payment/iyzipos/checkoutform/auth/ecom/detail';
 
         return $client->postAsync($url, [
             'body' => $iyzicoJson,
@@ -245,11 +296,25 @@ class ProcessPendingOrders
      */
     private function getPaymentDefinition()
     {
+        $storeId = $this->storeManager->getStore()->getId();
+
         return [
             'rand' => uniqid(),
-            'baseUrl' => $this->scopeConfig->getValue('payment/iyzipay/sandbox') ? 'https://sandbox-api.iyzipay.com' : 'https://api.iyzipay.com',
-            'apiKey' => $this->scopeConfig->getValue('payment/iyzipay/api_key'),
-            'secretKey' => $this->scopeConfig->getValue('payment/iyzipay/secret_key')
+            'baseUrl' => $this->scopeConfig->getValue(
+                'payment/iyzipay/sandbox',
+                \Magento\Store\Model\ScopeInterface::SCOPE_STORE,
+                $storeId
+            ) ? 'https://sandbox-api.iyzipay.com' : 'https://api.iyzipay.com',
+            'apiKey' => $this->scopeConfig->getValue(
+                'payment/iyzipay/api_key',
+                \Magento\Store\Model\ScopeInterface::SCOPE_STORE,
+                $storeId
+            ),
+            'secretKey' => $this->scopeConfig->getValue(
+                'payment/iyzipay/secret_key',
+                \Magento\Store\Model\ScopeInterface::SCOPE_STORE,
+                $storeId
+            )
         ];
     }
 
@@ -267,7 +332,3 @@ class ProcessPendingOrders
 
 
 }
-
-// Sipariş durumu pending_payment veya received olan siparişler kontrol edilmeli.
-// is_controlled olarak işaretlenmeli.
-// table name: iyzi_order_job

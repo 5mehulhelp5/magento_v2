@@ -25,32 +25,35 @@ namespace Iyzico\Iyzipay\Block\Iyzipay;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\View\Element\Template;
 use Magento\Framework\View\Element\Template\Context;
+use Magento\Store\Model\ScopeInterface;
 
-/**
- * Class OverlayScript
- *
- * @package Iyzico\Iyzipay\Block\Iyzipay
- * @extends Template
- *
- * This class used in view/frontend/layout/default.xml and view/frontend/templates/oveerlayscript.phtml
- */
 class OverlayScript extends Template
 {
-    /**
-     * @var $_scopeConfig
-     */
-    protected $_scopeConfig;
+    protected int $storeId;
+    protected ScopeConfigInterface $scopeConfig;
 
-    public function __construct(Context $context, ScopeConfigInterface $scopeConfig)
-    {
+    public function __construct(
+        Context $context,
+        ScopeConfigInterface $scopeConfig
+    ) {
         parent::__construct($context);
-        $this->_scopeConfig = $scopeConfig;
+        $this->scopeConfig = $scopeConfig;
+        $this->storeId = $context->getStoreManager()->getStore()->getId();
     }
 
     public function render(): ?string
     {
-        $position = $this->_scopeConfig->getValue('payment/iyzipay/overlayscript');
-        $protectedShopId = $this->_scopeConfig->getValue('payment/iyzipay/protectedShopId');
+        $position = $this->scopeConfig->getValue(
+            'payment/iyzipay/overlayscript',
+            ScopeInterface::SCOPE_STORE,
+            $this->storeId
+        );
+
+        $protectedShopId = $this->scopeConfig->getValue(
+            'payment/iyzipay/protectedShopId',
+            ScopeInterface::SCOPE_STORE,
+            $this->storeId
+        );
 
         if ($position !== 'hidden') {
             return <<<HTML

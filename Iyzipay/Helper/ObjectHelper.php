@@ -29,7 +29,7 @@ class ObjectHelper
         $object->forceThreeDS = "0";
         $object->callbackUrl = $callBack . "Iyzico_Iyzipay/response/iyzipayresponse";
         $object->cardUserKey = $cardUserKey;
-        $object->paymentSource = "MAGENTO2|" . $magentoVersion . "|SPACE-2.0.0";
+        $object->paymentSource = "MAGENTO2|" . $magentoVersion . "|SPACE-2.0.2";
         $object->goBackUrl = $callBack;
 
         return $object;

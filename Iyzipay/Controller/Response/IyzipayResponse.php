@@ -23,6 +23,7 @@
 namespace Iyzico\Iyzipay\Controller\Response;
 
 use Exception;
+use Throwable;
 use Iyzico\Iyzipay\Enums\ErrorCode;
 use Iyzico\Iyzipay\Helper\PkiStringBuilder;
 use Iyzico\Iyzipay\Helper\PkiStringBuilderFactory;
@@ -34,7 +35,6 @@ use Iyzico\Iyzipay\Helper\WebhookHelper;
 use Iyzico\Iyzipay\Helper\WebhookHelperFactory;
 use Iyzico\Iyzipay\Logger\IyziErrorLogger;
 use Iyzico\Iyzipay\Model\IyziCardFactory;
-use Iyzico\Iyzipay\Model\IyziOrderFactory;
 use Iyzico\Iyzipay\Model\ResourceModel\IyziOrderJob\Collection as IyziOrderJobCollection;
 use Magento\Checkout\Model\Session as CheckoutSession;
 use Magento\Customer\Model\Session as CustomerSession;
@@ -52,7 +52,7 @@ use Magento\Quote\Api\CartManagementInterface;
 use Magento\Sales\Api\Data\OrderInterface;
 use Magento\Sales\Api\OrderRepositoryInterface;
 use Magento\Store\Model\StoreManagerInterface;
-use Throwable;
+use Magento\Store\Model\ScopeInterface;
 
 class IyzipayResponse extends Action implements CsrfAwareActionInterface
 {
@@ -64,7 +64,6 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
     protected OrderRepositoryInterface $orderRepository;
     protected $resultFactory;
     protected ScopeConfigInterface $scopeConfig;
-    protected IyziOrderFactory $iyziOrderFactory;
     protected IyziCardFactory $iyziCardFactory;
     protected $messageManager;
     protected StoreManagerInterface $storeManager;
@@ -85,7 +84,6 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
         OrderRepositoryInterface $orderRepository,
         ResultFactory $resultFactory,
         ScopeConfigInterface $scopeConfig,
-        IyziOrderFactory $iyziOrderFactory,
         IyziCardFactory $iyziCardFactory,
         ManagerInterface $messageManager,
         StoreManagerInterface $storeManager,
@@ -104,7 +102,6 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
         $this->orderRepository = $orderRepository;
         $this->resultFactory = $resultFactory;
         $this->scopeConfig = $scopeConfig;
-        $this->iyziOrderFactory = $iyziOrderFactory;
         $this->iyziCardFactory = $iyziCardFactory;
         $this->messageManager = $messageManager;
         $this->storeManager = $storeManager;
@@ -168,6 +165,7 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
             $response = $this->getPaymentDetail($token);
 
             $this->updateOrderPaymentStatus($orderId, $response);
+            $this->updateOrderJobPaymentId($orderId, $response);
 
             if ($this->getUserId() != 0) {
                 $this->setUserCard($response);
@@ -256,6 +254,28 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
             $order = $this->setOrderInstallmentFee($order, $response->paidPrice, $response->installment);
         }
 
+        $order->addStatusHistoryComment("Payment ID:" . $response->paymentId);
+        $order->addStatusHistoryComment("Conversation ID:" . $response->conversationId);
+
+        $order->save();
+    }
+
+    /**
+     * Update Order Job Payment Id
+     *
+     * This function is responsible for updating the order payment status based on the response.
+     *
+     * @param string $orderId
+     * @param object $response
+     *
+     * @return void
+     * @throws Exception
+     */
+    private function updateOrderJobPaymentId(string $orderId, object $response): void
+    {
+        $order = $this->findOrderById($orderId);
+        $paymentId = $response->paymentId;
+        $this->setOrderJobPaymentId($orderId, $paymentId);
         $order->save();
     }
 
@@ -398,13 +418,11 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
         $order->setInstallmentFee($installmentPrice);
         $order->setInstallmentCount($installment);
 
-        // TODO: DataAssignObserver Check
-
         return $order;
     }
 
     /**
-     * Set Iyzipay Order
+     * Set Iyzipay Order Job
      *
      * This function is responsible for saving the iyzi order.
      *
@@ -414,16 +432,20 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
      */
     private function setIyziOrder(object $response, string $orderId)
     {
-        $iyziOrder = $this->iyziOrderFactory->create();
-        $iyziOrder->setData([
-            'payment_id' => $response->paymentId,
-            'total_amount' => $response->paidPrice,
-            'order_id' => $orderId,
-            'status' => $response->status,
-        ]);
-
         try {
-            $iyziOrder->save();
+            // Load the order by order ID
+            $order = $this->orderRepository->get($orderId);
+
+            // Get the payment object from the order
+            $payment = $order->getPayment();
+
+            // Set the iyzico_payment_id and iyzico_conversation_id fields
+            $payment->setData('iyzico_payment_id', $response->paymentId);
+            $payment->setData('iyzico_conversation_id', $response->conversationId);
+
+            // Save the updated order payment data
+            $this->orderRepository->save($order);
+
         } catch (Throwable $th) {
             $this->errorLogger->critical("setIyziOrder: " . $th->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
         }
@@ -442,6 +464,30 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
     {
         $iyziOrderJob = $this->iyziOrderJobCollection->addFieldToFilter('order_id', $orderId)->getFirstItem();
         $iyziOrderJob->setStatus($status);
+        try {
+            if ($status == 'processing' || $status == 'canceled') {
+                $iyziOrderJob->delete();
+            } else {
+                $iyziOrderJob->save();
+            }
+        } catch (Throwable $th) {
+            $this->errorLogger->critical("setIyziOrderJob: " . $th->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+        }
+    }
+
+    /**
+     * Set Iyzipay Order Job
+     *
+     * This function is responsible for saving the iyzi order job.
+     *
+     * @param string $orderId
+     * @param string $status
+     * @return void
+     */
+    private function setOrderJobPaymentId(string $orderId, string $paymentId)
+    {
+        $iyziOrderJob = $this->iyziOrderJobCollection->addFieldToFilter('order_id', $orderId)->getFirstItem();
+        $iyziOrderJob->setIyzicoPaymentId($paymentId);
         try {
             $iyziOrderJob->save();
         } catch (Throwable $th) {
@@ -481,11 +527,25 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
      */
     private function getPaymentDefinition()
     {
+        $storeId = $this->storeManager->getStore()->getId();
+
         return [
             'rand' => uniqid(),
-            'baseUrl' => $this->scopeConfig->getValue('payment/iyzipay/sandbox') ? 'https://sandbox-api.iyzipay.com' : 'https://api.iyzipay.com',
-            'apiKey' => $this->scopeConfig->getValue('payment/iyzipay/api_key'),
-            'secretKey' => $this->scopeConfig->getValue('payment/iyzipay/secret_key')
+            'baseUrl' => $this->scopeConfig->getValue(
+                'payment/iyzipay/sandbox',
+                ScopeInterface::SCOPE_STORE,
+                $storeId
+            ) ? 'https://sandbox-api.iyzipay.com' : 'https://api.iyzipay.com',
+            'apiKey' => $this->scopeConfig->getValue(
+                'payment/iyzipay/api_key',
+                ScopeInterface::SCOPE_STORE,
+                $storeId
+            ),
+            'secretKey' => $this->scopeConfig->getValue(
+                'payment/iyzipay/secret_key',
+                ScopeInterface::SCOPE_STORE,
+                $storeId
+            )
         ];
     }
 

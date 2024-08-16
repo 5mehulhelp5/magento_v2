@@ -1,5 +1,6 @@
 "Installment"," Installment"
-"Payment ID","Payment ID"
+"Payment ID","Payment ID",
+"Conversation ID","Conversation ID"
 "Payment Success","Payment Success, Payment ID: "
 "Installment Info:","Installment Info: "
 "Error Code:", "Error Code:"
@@ -76,3 +77,6 @@
 "SECOND", "second"
 "RETURN_HOME", "Return to Home"
 "RETURN_CART", "Return to Cart"
+
+"Payment ID: ","Payment ID",
+"Conversation ID: ","Conversation ID"

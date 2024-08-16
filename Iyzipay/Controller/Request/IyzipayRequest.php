@@ -164,7 +164,7 @@ class IyzipayRequest extends Action
         $iyzicoJson = json_encode($iyzico, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         $requestResponse = $requestHelper->sendCheckoutFormRequest($defination['baseUrl'], $iyzicoJson, $authorization);
 
-        $result = $this->handleRequestResponse($requestResponse, $currency);
+        $result = $this->handleRequestResponse($requestResponse);
 
         return $this->createJsonResult($result);
     }
@@ -178,13 +178,27 @@ class IyzipayRequest extends Action
      */
     private function getPaymentDefinition()
     {
+        $storeId = $this->storeManager->getStore()->getId();
+
         return [
             'rand' => uniqid(),
             'customerId' => 0,
             'customerCardUserKey' => '',
-            'baseUrl' => $this->scopeConfig->getValue('payment/iyzipay/sandbox') ? 'https://sandbox-api.iyzipay.com' : 'https://api.iyzipay.com',
-            'apiKey' => $this->scopeConfig->getValue('payment/iyzipay/api_key'),
-            'secretKey' => $this->scopeConfig->getValue('payment/iyzipay/secret_key'),
+            'baseUrl' => $this->scopeConfig->getValue(
+                'payment/iyzipay/sandbox',
+                ScopeInterface::SCOPE_STORE,
+                $storeId
+            ) ? 'https://sandbox-api.iyzipay.com' : 'https://api.iyzipay.com',
+            'apiKey' => $this->scopeConfig->getValue(
+                'payment/iyzipay/api_key',
+                ScopeInterface::SCOPE_STORE,
+                $storeId
+            ),
+            'secretKey' => $this->scopeConfig->getValue(
+                'payment/iyzipay/secret_key',
+                ScopeInterface::SCOPE_STORE,
+                $storeId
+            ),
         ];
     }
 
@@ -386,10 +400,10 @@ class IyzipayRequest extends Action
      * @throws NoSuchEntityException
      * @throws Exception
      */
-    private function handleRequestResponse($requestResponse, $currency)
+    private function handleRequestResponse($requestResponse)
     {
         if (isset($requestResponse->status) && $requestResponse->status == 'success') {
-            return $this->processSuccessfulResponse($requestResponse, $currency);
+            return $this->processSuccessfulResponse($requestResponse);
         } elseif (isset($requestResponse->errorCode)) {
             return $this->processErrorResponse($requestResponse);
         } elseif ($requestResponse === null) {
@@ -414,13 +428,13 @@ class IyzipayRequest extends Action
      * @throws CouldNotSaveException
      * @throws LocalizedException
      */
-    private function processSuccessfulResponse($requestResponse, $currency)
+    private function processSuccessfulResponse($requestResponse)
     {
         $this->quote = $this->checkoutSession->getQuote();
         $orderId = $this->placeOrder();
         $quoteId = $this->quote->getId();
 
-        $this->saveIyziOrderTable($requestResponse, $orderId, $quoteId);
+        $this->saveIyziOrderJobTable($requestResponse, $orderId, $quoteId);
         return ['success' => true, 'url' => $requestResponse->paymentPageUrl];
     }
 
@@ -444,7 +458,7 @@ class IyzipayRequest extends Action
         $order = $this->orderRepository->get($orderId);
         $comment = __("START_ORDER");
 
-        $order->setState('received')->setStatus('received');
+        $order->setState('pending_payment')->setStatus('pending_payment');
         $order->addStatusHistoryComment($comment);
         $order->getPayment()->setMethod('iyzipay');
 
@@ -463,7 +477,7 @@ class IyzipayRequest extends Action
      *
      * @throws CouldNotSaveException
      */
-    private function saveIyziOrderTable($requestResponse, $orderId, $quoteId)
+    private function saveIyziOrderJobTable($requestResponse, $orderId, $quoteId)
     {
         $iyzicoOrderJob = $this->_objectManager->create('Iyzico\Iyzipay\Model\IyziOrderJob');
 

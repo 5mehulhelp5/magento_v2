@@ -39,10 +39,10 @@ class StringHelper
     /**
      * Validates the given string
      *
-     * @param string $string
+     * @param mixed $string
      * @return string
      */
-    public function validateString(string $string): string
+    public function validateString(mixed $string): string
     {
         if (!empty(trim($string))) {
             return $string;

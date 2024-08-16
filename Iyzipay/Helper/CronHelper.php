@@ -6,6 +6,7 @@ use Magento\Framework\App\Helper\AbstractHelper;
 use Magento\Store\Model\ScopeInterface;
 use Magento\Framework\App\Config\Storage\WriterInterface;
 use Magento\Framework\App\Config\ScopeConfigInterface;
+use Magento\Store\Model\StoreManagerInterface;
 
 class CronHelper extends AbstractHelper
 {
@@ -15,27 +16,30 @@ class CronHelper extends AbstractHelper
 
     protected $configWriter;
     protected $scopeConfig;
+    protected $storeId;
 
     public function __construct(
         \Magento\Framework\App\Helper\Context $context,
         WriterInterface $configWriter,
-        ScopeConfigInterface $scopeConfig
+        ScopeConfigInterface $scopeConfig,
+        StoreManagerInterface $storeManager
     ) {
         parent::__construct($context);
         $this->configWriter = $configWriter;
         $this->scopeConfig = $scopeConfig;
+        $this->storeId = $storeManager->getStore()->getId();
     }
 
     public function getCronSchedule()
     {
-        $commonSettings = $this->scopeConfig->getValue(self::XML_PATH_COMMON_CRON_SETTINGS, ScopeInterface::SCOPE_STORE);
+        $commonSettings = $this->scopeConfig->getValue(self::XML_PATH_COMMON_CRON_SETTINGS, ScopeInterface::SCOPE_STORE, $this->storeId);
 
         if ($commonSettings && $commonSettings !== 'custom') {
             $this->saveEffectiveCronSchedule($commonSettings);
             return $commonSettings;
         }
 
-        $customCronSettings = $this->scopeConfig->getValue(self::XML_PATH_CUSTOM_CRON_SETTINGS, ScopeInterface::SCOPE_STORE);
+        $customCronSettings = $this->scopeConfig->getValue(self::XML_PATH_CUSTOM_CRON_SETTINGS, ScopeInterface::SCOPE_STORE, $this->storeId);
 
         if ($customCronSettings) {
             $this->saveEffectiveCronSchedule($customCronSettings);
@@ -47,7 +51,7 @@ class CronHelper extends AbstractHelper
 
     private function saveEffectiveCronSchedule($schedule)
     {
-        $this->configWriter->save(self::XML_PATH_EFFECTIVE_CRON_SCHEDULE, $schedule, ScopeConfigInterface::SCOPE_TYPE_DEFAULT, 0);
-        $this->configWriter->save(self::XML_PATH_EFFECTIVE_CRON_SCHEDULE, $schedule, ScopeInterface::SCOPE_STORE, 0);
+        $this->configWriter->save(self::XML_PATH_EFFECTIVE_CRON_SCHEDULE, $schedule, ScopeConfigInterface::SCOPE_TYPE_DEFAULT, $this->storeId);
+        $this->configWriter->save(self::XML_PATH_EFFECTIVE_CRON_SCHEDULE, $schedule, ScopeInterface::SCOPE_STORE, $this->storeId);
     }
 }

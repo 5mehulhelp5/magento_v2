@@ -22,9 +22,7 @@
 namespace Iyzico\Iyzipay\Observer;
 
 use Magento\Framework\Event\Observer;
-use Magento\Payment\Observer\AbstractDataAssignObserver;
 use Magento\Framework\ObjectManager\ObjectManager;
-use Magento\Sales\Model\Order;
 use Magento\Sales\Model\OrderFactory;
 use Magento\Checkout\Model\Session;
 

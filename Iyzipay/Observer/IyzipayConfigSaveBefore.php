@@ -24,8 +24,14 @@ namespace Iyzico\Iyzipay\Observer;
 use Magento\Framework\Event\ObserverInterface;
 use Magento\Framework\Event\Observer as EventObserver;
 use Magento\Framework\App\Config\ScopeConfigInterface;
+use Magento\Store\Model\ScopeInterface;
+use Magento\Store\Model\StoreManagerInterface;
+use Magento\Framework\App\Config\Storage\WriterInterface;
+use Magento\Framework\App\Request\Http;
+
 use Iyzico\Iyzipay\Controller\IyzicoBase\IyzicoPkiStringBuilder;
 use Iyzico\Iyzipay\Controller\IyzicoBase\IyzicoRequest;
+use Iyzico\Iyzipay\Helper\IyzicoHelper;
 use stdClass;
 
 class IyzipayConfigSaveBefore implements ObserverInterface
@@ -38,11 +44,11 @@ class IyzipayConfigSaveBefore implements ObserverInterface
     protected $_request;
 
     public function __construct(
-        \Magento\Framework\App\Config\ScopeConfigInterface $scopeConfig,
-        \Magento\Store\Model\StoreManagerInterface $storeManager,
-        \Iyzico\Iyzipay\Helper\IyzicoHelper $iyzicoHelper,
-       \Magento\Framework\App\Config\Storage\WriterInterface $configWriter,
-       \Magento\Framework\App\Request\Http $request
+        ScopeConfigInterface $scopeConfig,
+        StoreManagerInterface $storeManager,
+        IyzicoHelper $iyzicoHelper,
+        WriterInterface $configWriter,
+        Http $request
     ) {
         $this->_scopeConfig = $scopeConfig;
         $this->_storeManager = $storeManager;
@@ -57,18 +63,18 @@ class IyzipayConfigSaveBefore implements ObserverInterface
 
         $postData = $this->_request->getPostValue();
         $this->webhookUrlKey($postData);
-        $this->webhookSetControll($postData);
+        $this->webhookSetControll();
         $this->initSetWebhookUrlKey($postData);
 
-        if(!empty($postData['groups']['iyzipay']['fields']['active'])) {
+        if (!empty($postData['groups']['iyzipay']['fields']['active'])) {
 
 
             $apiKey = $postData['groups']['iyzipay']['fields']['api_key']['value'];
             $secretKey = $postData['groups']['iyzipay']['fields']['secret_key']['value'];
-            $randNumer = rand(100000,99999999);
+            $randNumer = rand(100000, 99999999);
 
             $storeId = $this->_storeManager->getStore()->getId();
-            $locale = $this->_scopeConfig->getValue('general/locale/code', \Magento\Store\Model\ScopeInterface::SCOPE_STORE, $storeId);
+            $locale = $this->_scopeConfig->getValue('general/locale/code', ScopeInterface::SCOPE_STORE, $storeId);
 
             $overlayObject = new stdClass();
             $overlayObject->locale = $this->_iyzicoHelper->cutLocale($locale);
@@ -79,15 +85,15 @@ class IyzipayConfigSaveBefore implements ObserverInterface
             $iyzicoRequest = new IyzicoRequest();
 
             $pkiString = $iyzicoPkiStringBuilder->pkiStringGenerate($overlayObject);
-            $authorization = $iyzicoPkiStringBuilder->authorizationGenerate($pkiString,$apiKey,$secretKey,$randNumer);
+            $authorization = $iyzicoPkiStringBuilder->authorizationGenerate($pkiString, $apiKey, $secretKey, $randNumer);
 
-            $iyzicoJson = json_encode($overlayObject,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE);
+            $iyzicoJson = json_encode($overlayObject, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
-            $requestResponse = $iyzicoRequest->iyzicoOverlayScriptRequest($iyzicoJson,$authorization);
+            $requestResponse = $iyzicoRequest->iyzicoOverlayScriptRequest($iyzicoJson, $authorization);
 
-            if($requestResponse->status == 'success') {
+            if ($requestResponse->status == 'success') {
 
-                $this->_configWriter->save('payment/iyzipay/protectedShopId',  $requestResponse->protectedShopId, $scope = ScopeConfigInterface::SCOPE_TYPE_DEFAULT, $scopeId = 0);
+                $this->_configWriter->save('payment/iyzipay/protectedShopId', $requestResponse->protectedShopId, $scope = ScopeConfigInterface::SCOPE_TYPE_DEFAULT, $scopeId = 0);
 
             }
 
@@ -97,74 +103,69 @@ class IyzipayConfigSaveBefore implements ObserverInterface
 
     public function initSetWebhookUrlKey($postData)
     {
+        $storeId = $this->_storeManager->getStore()->getId();
 
-      $webhookActive = $this->_scopeConfig->getValue('payment/iyzipay/webhook_url_key_active');
-      if($webhookActive == 0)
-      {
-        $apiKey = $postData['groups']['iyzipay']['fields']['api_key']['value'];
-        $secretKey = $postData['groups']['iyzipay']['fields']['secret_key']['value'];
-        if(isset($apiKey) && isset($secretKey))
-        {
-          $randNumer = rand(100000,99999999);
-          $sandboxStatus = $this->_scopeConfig->getValue('payment/iyzipay/sandbox');
-          $baseUrl = 'https://api.iyzipay.com';
+        $webhookActive = $this->_scopeConfig->getValue('payment/iyzipay/webhook_url_key_active', ScopeInterface::SCOPE_STORE, $storeId);
+        if ($webhookActive == 0) {
+            $apiKey = $postData['groups']['iyzipay']['fields']['api_key']['value'];
+            $secretKey = $postData['groups']['iyzipay']['fields']['secret_key']['value'];
+            if (isset($apiKey) && isset($secretKey)) {
+                $randNumer = rand(100000, 99999999);
+                $sandboxStatus = $this->_scopeConfig->getValue('payment/iyzipay/sandbox', ScopeInterface::SCOPE_STORE, $storeId);
+                $baseUrl = 'https://api.iyzipay.com';
 
-          if($sandboxStatus)
-              $baseUrl = 'https://sandbox-api.iyzipay.com';
+                if ($sandboxStatus)
+                    $baseUrl = 'https://sandbox-api.iyzipay.com';
 
 
-          $webhook_url_key = $this->_scopeConfig->getValue('payment/iyzipay/webhook_url_key');
+                $webhook_url_key = $this->_scopeConfig->getValue('payment/iyzipay/webhook_url_key', ScopeInterface::SCOPE_STORE, $storeId);
 
-          $setWebhookUrl = new stdClass();
-          $setWebhookUrl->webhookUrl = $this->_storeManager->getStore()->getBaseUrl().'rest/V1/iyzico/webhook/'.$webhook_url_key;
+                $setWebhookUrl = new stdClass();
+                $setWebhookUrl->webhookUrl = $this->_storeManager->getStore()->getBaseUrl() . 'rest/V1/iyzico/webhook/' . $webhook_url_key;
 
-          $iyzicoPkiStringBuilder = new IyzicoPkiStringBuilder();
-          $iyzicoRequest = new IyzicoRequest();
+                $iyzicoPkiStringBuilder = new IyzicoPkiStringBuilder();
+                $iyzicoRequest = new IyzicoRequest();
 
-          $pkiString = $iyzicoPkiStringBuilder->pkiStringGenerate($setWebhookUrl);
-          $authorization = $iyzicoPkiStringBuilder->authorizationGenerate($pkiString,$apiKey,$secretKey,$randNumer);
+                $pkiString = $iyzicoPkiStringBuilder->pkiStringGenerate($setWebhookUrl);
+                $authorization = $iyzicoPkiStringBuilder->authorizationGenerate($pkiString, $apiKey, $secretKey, $randNumer);
 
-          $iyzicoJson = json_encode($setWebhookUrl,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE);
+                $iyzicoJson = json_encode($setWebhookUrl, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
-          $requestResponseWebhook = $iyzicoRequest->iyzicoPostWebhookUrlKey($baseUrl,$iyzicoJson,$authorization);
-          $requestResponseWebhook->merchantNotificationUpdateStatus == 'UPDATED';
-          if($requestResponseWebhook->merchantNotificationUpdateStatus == 'UPDATED' || $requestResponseWebhook->merchantNotificationUpdateStatus == 'CREATED')
-          {
-            $this->_configWriter->save('payment/iyzipay/webhook_url_key_active',  '1', $scope = ScopeConfigInterface::SCOPE_TYPE_DEFAULT, $scopeId = 0);
+                $requestResponseWebhook = $iyzicoRequest->iyzicoPostWebhookUrlKey($baseUrl, $iyzicoJson, $authorization);
+                $requestResponseWebhook->merchantNotificationUpdateStatus == 'UPDATED';
+                if ($requestResponseWebhook->merchantNotificationUpdateStatus == 'UPDATED' || $requestResponseWebhook->merchantNotificationUpdateStatus == 'CREATED') {
+                    $this->_configWriter->save('payment/iyzipay/webhook_url_key_active', '1', $scope = ScopeConfigInterface::SCOPE_TYPE_DEFAULT, $scopeId = 0);
 
-          }
-          else {
-            return $this->_configWriter->save('payment/iyzipay/webhook_url_key_active',  '2', $scope = ScopeConfigInterface::SCOPE_TYPE_DEFAULT, $scopeId = 0);
+                } else {
+                    return $this->_configWriter->save('payment/iyzipay/webhook_url_key_active', '2', $scope = ScopeConfigInterface::SCOPE_TYPE_DEFAULT, $scopeId = 0);
 
-          }
-      }
+                }
+            }
 
-      }
+        }
 
     }
 
 
-    public function webhookSetControll($postData)
+    public function webhookSetControll()
     {
-
-      $webhookActive = $this->_scopeConfig->getValue('payment/iyzipay/webhook_url_key_active');
-      if(!$webhookActive)
-      {
-        $this->_configWriter->save('payment/iyzipay/webhook_url_key_active',  '0', $scope = ScopeConfigInterface::SCOPE_TYPE_DEFAULT, $scopeId = 0);
-      }
+        $storeId = $this->_storeManager->getStore()->getId();
+        $webhookActive = $this->_scopeConfig->getValue('payment/iyzipay/webhook_url_key_active', ScopeInterface::SCOPE_STORE, $storeId);
+        if (!$webhookActive) {
+            $this->_configWriter->save('payment/iyzipay/webhook_url_key_active', '0', ScopeInterface::SCOPE_STORE, $storeId);
+        }
     }
 
 
     public function webhookUrlKey($postData)
     {
+        $storeId = $this->_storeManager->getStore()->getId();
+        $webhookUrlKey = $this->_scopeConfig->getValue('payment/iyzipay/webhook_url_key');
+        if (!$webhookUrlKey) {
+            $webhookUrlKeyUniq = substr(base64_encode(time() . mt_rand()), 15, 6);
+            $this->_configWriter->save('payment/iyzipay/webhook_url_key', $webhookUrlKeyUniq, ScopeInterface::SCOPE_STORE, $storeId);
 
-      $webhookUrlKey = $this->_scopeConfig->getValue('payment/iyzipay/webhook_url_key');
-      if(!$webhookUrlKey)
-      {
-        $webhookUrlKeyUniq = substr(base64_encode(time() . mt_rand()),15,6);
-        $this->_configWriter->save('payment/iyzipay/webhook_url_key',  $webhookUrlKeyUniq , $scope = ScopeConfigInterface::SCOPE_TYPE_DEFAULT, $scopeId = 0);
-
-      }
+        }
     }
 
 
