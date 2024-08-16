@@ -54,6 +54,7 @@ class IyzipayWebhookField extends Field
     protected function getStoreId()
     {
         try {
+            $this->logger->info("Store ID: " . $this->storeManager->getStore()->getId());
             return $this->storeManager->getStore()->getId();
         } catch (NoSuchEntityException $e) {
             return null;
@@ -68,6 +69,8 @@ class IyzipayWebhookField extends Field
             $this->getStoreId()
         );
 
+        $this->logger->info("getStoreId: " + $this->getStoreId());
+        $this->logger->info("ScopeInterface::SCOPE_STORE: " + ScopeInterface::SCOPE_STORE);
         $this->logger->info("Webhook URL Key: $webhookUrlKey");
 
         if ($webhookUrlKey) {
@@ -86,6 +89,8 @@ class IyzipayWebhookField extends Field
             $this->getStoreId()
         );
 
+        $this->logger->info("getStoreId: " + $this->getStoreId());
+        $this->logger->info("ScopeInterface::SCOPE_STORE: " + ScopeInterface::SCOPE_STORE);
         $this->logger->info("Webhook Button Active: $isWebhookButtonActive");
 
         if ($isWebhookButtonActive == 2) {
