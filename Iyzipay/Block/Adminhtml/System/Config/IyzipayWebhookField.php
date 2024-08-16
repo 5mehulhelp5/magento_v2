@@ -68,7 +68,7 @@ class IyzipayWebhookField extends Field
             $this->getStoreId()
         );
 
-        $this->logger->info('Webhook URL Key: ' . $webhookUrlKey);
+        $this->logger->info("Webhook URL Key: $webhookUrlKey");
 
         if ($webhookUrlKey) {
             $baseUrl = $this->storeManager->getStore($this->getStoreId())->getBaseUrl();
@@ -85,6 +85,8 @@ class IyzipayWebhookField extends Field
             ScopeInterface::SCOPE_STORE,
             $this->getStoreId()
         );
+
+        $this->logger->info("Webhook Button Active: $isWebhookButtonActive");
 
         if ($isWebhookButtonActive == 2) {
             $htmlButton = '<form action="#" method="post">
