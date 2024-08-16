@@ -68,7 +68,6 @@ class IyzipayWebhookField extends Field
      */
     protected function _getElementHtml(AbstractElement $element): string
     {
-
         $this->logger->info("Store ID: " . $this->getStoreId());
         $this->logger->info("ScopeInterface::SCOPE_STORE: " . ScopeInterface::SCOPE_STORE);
 
@@ -79,7 +78,19 @@ class IyzipayWebhookField extends Field
         if ($webhookUrlKey) {
             return $this->_storeManager->getStore()->getBaseUrl() . 'rest/V1/iyzico/webhook/' . $webhookUrlKey . '<br>' . $this->getWebhookSubmitButtonHtml();
         } else {
-            return 'Clear cookies and then push the "Save Config" button';
+            $objectManager = ObjectManager::getInstance();
+            $resource = $objectManager->get('Magento\Framework\App\ResourceConnection');
+            $connection = $resource->getConnection();
+            $tableName = $resource->getTableName('core_config_data');
+            $query = "SELECT value FROM " . $tableName . " WHERE path = 'payment/iyzipay/webhook_url_key' AND scope = 'stores' AND scope_id = " . $this->getStoreId();
+            $result = $connection->fetchOne($query);
+
+            if ($result) {
+                $this->logger->info("Webhook URL Key from DB: " . $result);
+                return $this->_storeManager->getStore()->getBaseUrl() . 'rest/V1/iyzico/webhook/' . $result . '<br>' . $this->getWebhookSubmitButtonHtml();
+            } else {
+                return 'Clear cookies and then push the "Save Config" button';
+            }
         }
     }
 
