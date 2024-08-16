@@ -508,7 +508,7 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
         $defination = $this->getPaymentDefinition();
         $pkiStringBuilder = $this->getPkiStringBuilder();
         $requestHelper = $this->getRequestHelper();
-        $conversationId = $this->findParametersByToken($token, 'iyzico_conversationId');
+        $conversationId = $this->findParametersByToken($token, 'iyzico_conversationid');
 
         $tokenDetailObject = $this->responseObjectHelper->createTokenDetailObject($conversationId, $token);
         $iyzicoPkiString = $pkiStringBuilder->generatePkiString($tokenDetailObject);

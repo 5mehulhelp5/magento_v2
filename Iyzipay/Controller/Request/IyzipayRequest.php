@@ -485,7 +485,7 @@ class IyzipayRequest extends Action
             'order_id' => $orderId,
             'quote_id' => $quoteId,
             'iyzico_payment_token' => $requestResponse->token,
-            'iyzico_conversationId' => $requestResponse->conversationId,
+            'iyzico_conversationid' => $requestResponse->conversationId,
             'status' => 'received'
         ]);
 
