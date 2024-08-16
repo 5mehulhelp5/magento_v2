@@ -26,80 +26,76 @@ use Magento\Config\Block\System\Config\Form\Field;
 use Magento\Framework\App\ObjectManager;
 use Magento\Framework\Data\Form\Element\AbstractElement;
 use Magento\Framework\Exception\NoSuchEntityException;
-use Magento\Store\Model\ScopeInterface;
 use Magento\Store\Model\StoreManagerInterface;
-use Magento\Backend\Block\Template\Context;
-use Magento\Framework\App\Config\ScopeConfigInterface;
+use Magento\Store\Model\ScopeInterface;
 use Iyzico\Iyzipay\Logger\IyziErrorLogger;
 
+/**
+ * Class GetWebhookUrlField
+ *
+ * @package Vendor\Module\Block\Adminhtml\Config
+ * @extends Field
+ *
+ * This class is used in etc/adminhtml/system.xml
+ */
 class IyzipayWebhookField extends Field
 {
-    protected $storeManager;
-    protected $scopeConfig;
-    protected $logger;
+    protected StoreManagerInterface $storeManager;
+    protected IyziErrorLogger $logger;
 
-    public function __construct(
-        Context $context,
-        StoreManagerInterface $storeManager,
-        ScopeConfigInterface $scopeConfig,
-        IyziErrorLogger $logger,
-        array $data = []
-    ) {
-        $this->storeManager = $storeManager;
-        $this->scopeConfig = $scopeConfig;
-        $this->logger = $logger;
-        parent::__construct($context, $data);
-    }
-
-    protected function getStoreId()
+    private function getStoreId(): int
     {
-        try {
-            $this->logger->info("Store ID: " . $this->storeManager->getStore()->getId());
-            return $this->storeManager->getStore()->getId();
-        } catch (NoSuchEntityException $e) {
-            return null;
-        }
+        return $this->storeManager->getStore()->getId();
     }
 
+    /**
+     * Retrieve the webhook URL and submit button HTML
+     *
+     * @param AbstractElement $element
+     * @return string
+     * @throws NoSuchEntityException
+     */
     protected function _getElementHtml(AbstractElement $element): string
     {
-        $webhookUrlKey = $this->scopeConfig->getValue(
-            'payment/iyzipay/webhook_url_key',
-            ScopeInterface::SCOPE_STORE,
-            $this->getStoreId()
-        );
 
-        $this->logger->info("getStoreId: " + $this->getStoreId());
+        $this->logger->info("Store ID: " . $this->getStoreId());
         $this->logger->info("ScopeInterface::SCOPE_STORE: " . ScopeInterface::SCOPE_STORE);
-        $this->logger->info("Webhook URL Key: $webhookUrlKey");
+
+        $webhookUrlKey = $this->_scopeConfig->getValue('payment/iyzipay/webhook_url_key', ScopeInterface::SCOPE_STORE, $this->getStoreId());
+
+        $this->logger->info("Webhook URL Key: " . $webhookUrlKey);
 
         if ($webhookUrlKey) {
-            $baseUrl = $this->storeManager->getStore($this->getStoreId())->getBaseUrl();
-            return $baseUrl . 'rest/V1/iyzico/webhook/' . $webhookUrlKey . '<br>' . $this->getWebhookSubmitButtonHtml();
+            return $this->_storeManager->getStore()->getBaseUrl() . 'rest/V1/iyzico/webhook/' . $webhookUrlKey . '<br>' . $this->getWebhookSubmitButtonHtml();
         } else {
             return 'Clear cookies and then push the "Save Config" button';
         }
     }
 
+    /**
+     * Generate webhook submit button HTML
+     *
+     * @return string
+     */
     public function getWebhookSubmitButtonHtml(): string
     {
-        $isWebhookButtonActive = $this->scopeConfig->getValue(
-            'payment/iyzipay/webhook_url_key_active',
-            ScopeInterface::SCOPE_STORE,
-            $this->getStoreId()
-        );
 
-        $this->logger->info("getStoreId: " + $this->getStoreId());
+        $this->logger->info("Store ID: " . $this->getStoreId());
         $this->logger->info("ScopeInterface::SCOPE_STORE: " . ScopeInterface::SCOPE_STORE);
-        $this->logger->info("Webhook Button Active: $isWebhookButtonActive");
+
+        $isWebhookButtonActive = $this->_scopeConfig->getValue('payment/iyzipay/webhook_url_key_active', ScopeInterface::SCOPE_STORE, $this->getStoreId());
+
+        $this->logger->info("isWebhookButtonActive: " . $isWebhookButtonActive);
 
         if ($isWebhookButtonActive == 2) {
             $htmlButton = '<form action="#" method="post">
                            <button class="btn btn-light" type="submit" name="button">Activate</button>
-                           <a href="mailto:integration@iyzico.com">integration@iyzico.com</a>
+                           <a href="mailto:integration@vendor.com">integration@vendor.com</a>
                            </form>';
 
             $postData = $this->getRequest()->getPost();
+
+            $this->logger->info("Post Data: " . json_encode($postData));
 
             if ($postData) {
                 $this->deactivateWebhookButton();
@@ -110,14 +106,16 @@ class IyzipayWebhookField extends Field
         return '';
     }
 
+    /**
+     * Deactivate the webhook button
+     */
     protected function deactivateWebhookButton()
     {
         $objectManager = ObjectManager::getInstance();
         $resource = $objectManager->get('Magento\Framework\App\ResourceConnection');
         $connection = $resource->getConnection();
         $tableName = $resource->getTableName('core_config_data');
-        $storeId = $this->getStoreId();
-        $sql = "UPDATE " . $tableName . " SET value = '0' WHERE path = 'payment/iyzipay/webhook_url_key_active' AND scope = 'stores' AND scope_id = " . $storeId;
+        $sql = "UPDATE " . $tableName . " SET value = '0' WHERE path = 'payment/iyzipay/webhook_url_key_active'";
         $connection->query($sql);
     }
 }
