@@ -22,6 +22,7 @@
 
 namespace Iyzico\Iyzipay\Block\Adminhtml\System\Config;
 
+use Iyzico\Iyzipay\Logger\IyziWebhookLogger;
 use Magento\Config\Block\System\Config\Form\Field;
 use Magento\Framework\App\ObjectManager;
 use Magento\Framework\App\Config\ScopeConfigInterface;
@@ -44,16 +45,19 @@ class IyzipayWebhookField extends Field
 {
     protected ScopeConfigInterface $scopeConfig;
     protected StoreManagerInterface $storeManager;
+    protected IyziWebhookLogger $logger;
 
     public function __construct(
         Context $context,
         StoreManagerInterface $storeManager,
         ScopeConfigInterface $scopeConfig,
+        IyziWebhookLogger $logger,
         array $data = [],
         ?SecureHtmlRenderer $secureRenderer = null
     ) {
         $this->storeManager = $storeManager;
         $this->scopeConfig = $scopeConfig;
+        $this->logger = $logger;
         parent::__construct($context, $data);
         $this->secureRenderer = $secureRenderer ?? ObjectManager::getInstance()->get(SecureHtmlRenderer::class);
     }
@@ -67,12 +71,18 @@ class IyzipayWebhookField extends Field
      */
     protected function _getElementHtml(AbstractElement $element): string
     {
+        $this->logger->info('IyzipayWebhookField.php _getElementHtml Webhook URL is being generated');
         $websiteId = $this->storeManager->getWebsite()->getId();
+        $this->logger->info('IyzipayWebhookField.php _getElementHtml Webhook URL is being generated for website ID: ' . $websiteId);
+        $this->logger->info("IyzipayWebhookField.php _getElementHtml ScopeInterface::SCOPE_WEBSITE: " . ScopeInterface::SCOPE_WEBSITE);
+
         $webhookUrlKey = $this->scopeConfig->getValue(
             'payment/iyzipay/webhook_url_key',
             ScopeInterface::SCOPE_WEBSITE,
             $websiteId
         );
+
+        $this->logger->info('IyzipayWebhookField.php _getElementHtml Webhook URL key: ' . $webhookUrlKey);
 
         if ($webhookUrlKey) {
             return $this->_storeManager->getStore()->getBaseUrl() . 'rest/V1/iyzico/webhook/' . $webhookUrlKey . '<br>' . $this->getWebhookSubmitButtonHtml();
