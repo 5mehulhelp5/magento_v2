@@ -74,41 +74,46 @@ class ProcessPendingOrders
 
     public function execute()
     {
-        $this->cronLogger->info('Iyzico cron job started');
+        try {
+            $this->cronLogger->info('Iyzico cron job started');
 
-        $page = 1;
-        $processedCount = 0;
-        $ordersToDelete = [];
+            $page = 1;
+            $processedCount = 0;
+            $ordersToDelete = [];
 
-        do {
-            $orders = $this->getPageOfOrders($page);
-            $ordersCount = count($orders);
+            do {
+                $orders = $this->getPageOfOrders($page);
+                $ordersCount = count($orders);
 
-            if ($ordersCount > 0) {
-                $this->processOrders($orders, $ordersToDelete);
-                $processedCount += $ordersCount;
-                $page++;
+                if ($ordersCount > 0) {
+                    $this->processOrders($orders, $ordersToDelete);
+                    $processedCount += $ordersCount;
+                    $page++;
+                }
+
+                $this->cronLogger->info("Processed batch", [
+                    'page' => $page - 1,
+                    'processed_count' => $ordersCount,
+                    'total_processed' => $processedCount
+                ]);
+
+            } while ($ordersCount > 0);
+
+            if (!empty($ordersToDelete)) {
+                $this->deleteProcessedOrders($ordersToDelete);
             }
 
-            $this->cronLogger->info("Processed batch", [
-                'page' => $page - 1,
-                'processed_count' => $ordersCount,
-                'total_processed' => $processedCount
-            ]);
+            if ($processedCount == 0) {
+                $this->cronLogger->info("No orders processed in this run.");
+            } else {
+                $this->cronLogger->info("Cron job completed", ['total_processed' => $processedCount]);
+            }
 
-        } while ($ordersCount > 0);
+            $this->cronLogger->info('Iyzico cron job completed');
 
-        if (!empty($ordersToDelete)) {
-            $this->deleteProcessedOrders($ordersToDelete);
+        } catch (\Exception $e) {
+            $this->cronLogger->error('Iyzico cron job failed: ' . $e->getMessage());
         }
-
-        if ($processedCount == 0) {
-            $this->cronLogger->info("No orders processed in this run.");
-        } else {
-            $this->cronLogger->info("Cron job completed", ['total_processed' => $processedCount]);
-        }
-
-        $this->cronLogger->info('Iyzico cron job completed');
         return [];
     }
 
