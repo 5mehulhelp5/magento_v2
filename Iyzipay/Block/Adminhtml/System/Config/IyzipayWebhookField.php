@@ -69,34 +69,23 @@ class IyzipayWebhookField extends Field
      * @return string
      * @throws NoSuchEntityException
      */
-    protected function _getElementHtml(AbstractElement $element)
+    protected function _getElementHtml(AbstractElement $element): string
     {
-        try {
-            $webhookUrlKey = $this->scopeConfig->getValue(
-                'payment/iyzipay/webhook_url_key',
-                ScopeInterface::SCOPE_WEBSITE,
-                $this->_storeManager->getWebsite()->getId()
-            );
+        $websiteId = $this->storeManager->getWebsite()->getId();
+        $webhookUrlKey = $this->scopeConfig->getValue(
+            'payment/iyzipay/webhook_url_key',
+            ScopeInterface::SCOPE_WEBSITES,
+            $websiteId
+        );
 
-            $this->logger->info('Webhook URL Key: ' . ($webhookUrlKey ?: 'null'));
+        $this->logger->info('websiteId: ' . $websiteId ?? 'null');
+        $this->logger->info('Webhook URL Key: ' . $webhookUrlKey ?? 'null');
 
-            if ($webhookUrlKey) {
-                $baseUrl = $this->_storeManager->getStore()->getBaseUrl();
-                $webhookUrl = $baseUrl . 'rest/V1/iyzico/webhook/' . $webhookUrlKey;
-                $this->logger->info('Generated Webhook URL: ' . $webhookUrl);
-                return '<input type="text" id="' . $element->getHtmlId() . '" name="' . $element->getName()
-                    . '" value="' . $webhookUrl . '" ' . $element->serialize($element->getHtmlAttributes()) . '/>';
-            } else {
-                $this->logger->warning('Webhook URL key is null.');
-                return '<input type="text" id="' . $element->getHtmlId() . '" name="' . $element->getName()
-                    . '" value="Please save the configuration to generate the Webhook URL." '
-                    . $element->serialize($element->getHtmlAttributes()) . ' disabled/>';
-            }
-        } catch (\Exception $e) {
-            $this->logger->error('Error in IyzipayWebhookField: ' . $e->getMessage());
-            return '<input type="text" id="' . $element->getHtmlId() . '" name="' . $element->getName()
-                . '" value="An error occurred. Please check the logs." '
-                . $element->serialize($element->getHtmlAttributes()) . ' disabled/>';
+        if ($webhookUrlKey) {
+            $this->logger->info('Webhook URL: ' . $this->_storeManager->getStore()->getBaseUrl() . 'rest/V1/iyzico/webhook/' . $webhookUrlKey);
+            return $this->_storeManager->getStore()->getBaseUrl() . 'rest/V1/iyzico/webhook/' . $webhookUrlKey . '<br>' . $this->getWebhookSubmitButtonHtml();
+        } else {
+            return 'Clear cookies and then push the "Save Config" button';
         }
     }
 
@@ -110,7 +99,7 @@ class IyzipayWebhookField extends Field
         $websiteId = $this->storeManager->getWebsite()->getId();
         $isWebhookButtonActive = $this->scopeConfig->getValue(
             'payment/iyzipay/webhook_url_key_active',
-            ScopeInterface::SCOPE_WEBSITE,
+            ScopeInterface::SCOPE_WEBSITES,
             $websiteId
         );
 
@@ -140,7 +129,7 @@ class IyzipayWebhookField extends Field
         $resource = $objectManager->get('Magento\Framework\App\ResourceConnection');
         $connection = $resource->getConnection();
         $tableName = $resource->getTableName('core_config_data');
-        $sql = "UPDATE " . $tableName . " SET value = '0' WHERE path = 'payment/iyzipay/webhook_url_key_active'";
+        $sql = "UPDATE " . $tableName . " SET value = '0' WHERE scope = 'websites' AND path = 'payment/iyzipay/webhook_url_key_active'";
         $connection->query($sql);
     }
 }
