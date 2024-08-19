@@ -47,6 +47,8 @@ class Webhook implements WebhookInterface
     public function getResponse($webhookUrlKey)
     {
         $expectedWebhookUrlKey = $this->webhookHelper->getWebhookUrl();
+        $this->webhookLogger->info("Webhook.php Expected Webhook URL Key: " . $expectedWebhookUrlKey ?? 'null');
+        $this->webhookLogger->info("Webhook.php Webhook URL Key: " . $webhookUrlKey ?? 'null');
 
         if ($webhookUrlKey != $expectedWebhookUrlKey) {
             $this->logger->error("Error: '{$webhookUrlKey}' is not a valid webhook URL key. Expected: '{$expectedWebhookUrlKey}'.");
@@ -70,6 +72,8 @@ class Webhook implements WebhookInterface
             $this->logger->error("Error: Invalid parameters provided.");
             return $this->webhookHelper->webhookHttpResponse("Error: Invalid parameters provided.", 404);
         }
+
+        $this->webhookLogger->info("Nothitng to return");
 
     }
 

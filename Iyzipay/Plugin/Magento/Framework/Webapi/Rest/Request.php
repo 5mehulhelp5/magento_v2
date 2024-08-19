@@ -51,6 +51,8 @@ class Request
             $this->websiteId
         );
 
+        $this->logger->info('Request.php Webhook URL Key: ' . $webhookUrlKey ?? 'null');
+
         if ($subject->getRequestUri() === ('/rest/V1/iyzico/webhook/' . $webhookUrlKey) || $subject->getRequestUri() === '/index.php/rest/V1/iyzico/callback/') {
             $result = ['text/html'];
         }
