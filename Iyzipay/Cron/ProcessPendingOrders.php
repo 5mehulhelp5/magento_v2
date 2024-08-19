@@ -74,6 +74,8 @@ class ProcessPendingOrders
 
     public function execute()
     {
+        $this->cronLogger->info('Iyzico cron job started');
+
         $page = 1;
         $processedCount = 0;
         $ordersToDelete = [];
@@ -106,11 +108,14 @@ class ProcessPendingOrders
             $this->cronLogger->info("Cron job completed", ['total_processed' => $processedCount]);
         }
 
+        $this->cronLogger->info('Iyzico cron job completed');
         return [];
     }
 
     private function getPageOfOrders($page)
     {
+        $this->cronLogger->info('Fetching orders', ['page' => $page]);
+
         $this->collection
             ->addFieldToFilter('status', ['in' => ['pending_payment', 'received']])
             ->addFieldToFilter('is_controlled', ['eq' => 0])
@@ -122,6 +127,11 @@ class ProcessPendingOrders
 
     private function processOrders($orders, &$ordersToDelete)
     {
+
+        $this->cronLogger->info('Processing orders', ['count' => count($orders)]);
+        $this->cronLogger->info('Orders', ['orders' => $orders]);
+        $this->cronLogger->info('OrdersToDelete', ['ordersToDelete' => $ordersToDelete]);
+
         $promises = [];
         $client = new Client();
 
@@ -156,6 +166,8 @@ class ProcessPendingOrders
 
     private function updateLastControlDate($order)
     {
+        $this->cronLogger->info('Updating last control date', ['order_id' => $order->getOrderId()]);
+
         $oldLastControlledAt = $order->getLastControlledAt();
         $newLastControlledAt = date('Y-m-d H:i:s');
 
