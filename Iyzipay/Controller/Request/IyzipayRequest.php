@@ -186,17 +186,17 @@ class IyzipayRequest extends Action
             'customerCardUserKey' => '',
             'baseUrl' => $this->scopeConfig->getValue(
                 'payment/iyzipay/sandbox',
-                ScopeInterface::SCOPE_WEBSITE,
+                ScopeInterface::SCOPE_WEBSITES,
                 $websiteId
             ) ? 'https://sandbox-api.iyzipay.com' : 'https://api.iyzipay.com',
             'apiKey' => $this->scopeConfig->getValue(
                 'payment/iyzipay/api_key',
-                ScopeInterface::SCOPE_WEBSITE,
+                ScopeInterface::SCOPE_WEBSITES,
                 $websiteId
             ),
             'secretKey' => $this->scopeConfig->getValue(
                 'payment/iyzipay/secret_key',
-                ScopeInterface::SCOPE_WEBSITE,
+                ScopeInterface::SCOPE_WEBSITES,
                 $websiteId
             ),
         ];
@@ -262,7 +262,7 @@ class IyzipayRequest extends Action
     {
         return $this->scopeConfig->getValue(
             'general/locale/code',
-            ScopeInterface::SCOPE_WEBSITE,
+            ScopeInterface::SCOPE_WEBSITES,
             $websiteId
         );
     }

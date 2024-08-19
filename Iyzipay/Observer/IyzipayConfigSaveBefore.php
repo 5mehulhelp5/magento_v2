@@ -75,7 +75,7 @@ class IyzipayConfigSaveBefore implements ObserverInterface
             $websiteId = $this->storeManager->getWebsite()->getId();
             $locale = $this->scopeConfig->getValue(
                 'general/locale/code',
-                ScopeInterface::SCOPE_WEBSITE,
+                ScopeInterface::SCOPE_WEBSITES,
                 $websiteId
             );
 
@@ -99,7 +99,7 @@ class IyzipayConfigSaveBefore implements ObserverInterface
                 $this->configWriter->save(
                     'payment/iyzipay/protectedShopId',
                     $requestResponse->protectedShopId,
-                    ScopeInterface::SCOPE_WEBSITE,
+                    ScopeInterface::SCOPE_WEBSITES,
                     $websiteId
                 );
 
@@ -114,7 +114,7 @@ class IyzipayConfigSaveBefore implements ObserverInterface
         $websiteId = $this->storeManager->getWebsite()->getId();
         $webhookActive = $this->scopeConfig->getValue(
             'payment/iyzipay/webhook_url_key_active',
-            ScopeInterface::SCOPE_WEBSITE,
+            ScopeInterface::SCOPE_WEBSITES,
             $websiteId
         );
         if ($webhookActive == 0) {
@@ -124,7 +124,7 @@ class IyzipayConfigSaveBefore implements ObserverInterface
                 $randNumer = rand(100000, 99999999);
                 $sandboxStatus = $this->scopeConfig->getValue(
                     'payment/iyzipay/sandbox',
-                    ScopeInterface::SCOPE_WEBSITE,
+                    ScopeInterface::SCOPE_WEBSITES,
                     $websiteId
                 );
                 $baseUrl = 'https://api.iyzipay.com';
@@ -135,7 +135,7 @@ class IyzipayConfigSaveBefore implements ObserverInterface
 
                 $webhook_url_key = $this->scopeConfig->getValue(
                     'payment/iyzipay/webhook_url_key',
-                    ScopeInterface::SCOPE_WEBSITE,
+                    ScopeInterface::SCOPE_WEBSITES,
                     $websiteId
                 );
 
@@ -156,7 +156,7 @@ class IyzipayConfigSaveBefore implements ObserverInterface
                     $this->configWriter->save(
                         'payment/iyzipay/webhook_url_key_active',
                         '1',
-                        ScopeInterface::SCOPE_WEBSITE,
+                        ScopeInterface::SCOPE_WEBSITES,
                         $websiteId
                     );
 
@@ -164,7 +164,7 @@ class IyzipayConfigSaveBefore implements ObserverInterface
                     return $this->configWriter->save(
                         'payment/iyzipay/webhook_url_key_active',
                         '2',
-                        ScopeInterface::SCOPE_WEBSITE,
+                        ScopeInterface::SCOPE_WEBSITES,
                         $websiteId
                     );
 
@@ -181,14 +181,14 @@ class IyzipayConfigSaveBefore implements ObserverInterface
         $websiteId = $this->storeManager->getWebsite()->getId();
         $webhookActive = $this->scopeConfig->getValue(
             'payment/iyzipay/webhook_url_key_active',
-            ScopeInterface::SCOPE_WEBSITE,
+            ScopeInterface::SCOPE_WEBSITES,
             $websiteId
         );
         if (!$webhookActive) {
             $this->configWriter->save(
                 'payment/iyzipay/webhook_url_key_active',
                 '0',
-                ScopeInterface::SCOPE_WEBSITE,
+                ScopeInterface::SCOPE_WEBSITES,
                 $websiteId
             );
         }
@@ -200,7 +200,7 @@ class IyzipayConfigSaveBefore implements ObserverInterface
         $websiteId = $this->storeManager->getWebsite()->getId();
         $webhookUrlKey = $this->scopeConfig->getValue(
             'payment/iyzipay/webhook_url_key',
-            ScopeInterface::SCOPE_WEBSITE,
+            ScopeInterface::SCOPE_WEBSITES,
             $websiteId
         );
         if (!$webhookUrlKey) {
@@ -208,7 +208,7 @@ class IyzipayConfigSaveBefore implements ObserverInterface
             $this->configWriter->save(
                 'payment/iyzipay/webhook_url_key',
                 $webhookUrlKeyUniq,
-                ScopeInterface::SCOPE_WEBSITE,
+                ScopeInterface::SCOPE_WEBSITES,
                 $websiteId
             );
 

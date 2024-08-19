@@ -51,13 +51,13 @@ class OverlayScript extends Template
 
         $position = $this->scopeConfig->getValue(
             'payment/iyzipay/overlayscript',
-            ScopeInterface::SCOPE_WEBSITE,
+            ScopeInterface::SCOPE_WEBSITES,
             $websiteId
         );
 
         $protectedShopId = $this->scopeConfig->getValue(
             'payment/iyzipay/protectedShopId',
-            ScopeInterface::SCOPE_WEBSITE,
+            ScopeInterface::SCOPE_WEBSITES,
             $websiteId
         );
 

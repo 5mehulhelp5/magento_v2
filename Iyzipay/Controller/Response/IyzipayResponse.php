@@ -533,17 +533,17 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
             'rand' => uniqid(),
             'baseUrl' => $this->scopeConfig->getValue(
                 'payment/iyzipay/sandbox',
-                ScopeInterface::SCOPE_WEBSITE,
+                ScopeInterface::SCOPE_WEBSITES,
                 $websiteId
             ) ? 'https://sandbox-api.iyzipay.com' : 'https://api.iyzipay.com',
             'apiKey' => $this->scopeConfig->getValue(
                 'payment/iyzipay/api_key',
-                ScopeInterface::SCOPE_WEBSITE,
+                ScopeInterface::SCOPE_WEBSITES,
                 $websiteId
             ),
             'secretKey' => $this->scopeConfig->getValue(
                 'payment/iyzipay/secret_key',
-                ScopeInterface::SCOPE_WEBSITE,
+                ScopeInterface::SCOPE_WEBSITES,
                 $websiteId
             )
         ];
@@ -625,7 +625,7 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
         $websiteId = $this->storeManager->getWebsite()->getId();
         return $this->scopeConfig->getValue(
             'payment/iyzipay/order_status',
-            ScopeInterface::SCOPE_WEBSITE,
+            ScopeInterface::SCOPE_WEBSITES,
             $websiteId
         );
     }

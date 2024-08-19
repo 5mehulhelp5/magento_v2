@@ -65,7 +65,7 @@ class WebhookHelper
      */
     public function getScopeInterface(): string
     {
-        return ScopeInterface::SCOPE_WEBSITE;
+        return ScopeInterface::SCOPE_WEBSITES;
     }
 
     /**

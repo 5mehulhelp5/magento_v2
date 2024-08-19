@@ -47,7 +47,7 @@ class Request
     {
         $webhookUrlKey = $this->scopeConfig->getValue(
             'payment/iyzipay/webhook_url_key',
-            ScopeInterface::SCOPE_WEBSITE,
+            ScopeInterface::SCOPE_WEBSITES,
             $this->websiteId
         );
 
