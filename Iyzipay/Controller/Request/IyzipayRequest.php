@@ -139,8 +139,8 @@ class IyzipayRequest extends Action
         $customerMail = $postData['iyziQuoteEmail'] ?? null;
         $customerBasketId = $postData['iyziQuoteId'] ?? null;
         $checkoutSession = $this->checkoutSession->getQuote();
-        $storeId = $this->storeManager->getStore()->getId();
-        $locale = $this->getLocale($storeId);
+        $websiteId = $this->storeManager->getWebsite()->getId();
+        $locale = $this->getLocale($websiteId);
         $currency = $this->getCurrency();
         $callBack = $this->getCallbackUrl();
         $quoteId = $checkoutSession->getId();
@@ -178,7 +178,7 @@ class IyzipayRequest extends Action
      */
     private function getPaymentDefinition()
     {
-        $storeId = $this->storeManager->getStore()->getId();
+        $websiteId = $this->storeManager->getWebsite()->getId();
 
         return [
             'rand' => uniqid(),
@@ -186,18 +186,18 @@ class IyzipayRequest extends Action
             'customerCardUserKey' => '',
             'baseUrl' => $this->scopeConfig->getValue(
                 'payment/iyzipay/sandbox',
-                ScopeInterface::SCOPE_STORE,
-                $storeId
+                ScopeInterface::SCOPE_WEBSITE,
+                $websiteId
             ) ? 'https://sandbox-api.iyzipay.com' : 'https://api.iyzipay.com',
             'apiKey' => $this->scopeConfig->getValue(
                 'payment/iyzipay/api_key',
-                ScopeInterface::SCOPE_STORE,
-                $storeId
+                ScopeInterface::SCOPE_WEBSITE,
+                $websiteId
             ),
             'secretKey' => $this->scopeConfig->getValue(
                 'payment/iyzipay/secret_key',
-                ScopeInterface::SCOPE_STORE,
-                $storeId
+                ScopeInterface::SCOPE_WEBSITE,
+                $websiteId
             ),
         ];
     }
@@ -255,12 +255,16 @@ class IyzipayRequest extends Action
      *
      * This function is responsible for getting the locale.
      *
-     * @param int $storeId
+     * @param int $websiteId
      * @return string
      */
-    private function getLocale($storeId)
+    private function getLocale($websiteId)
     {
-        return $this->scopeConfig->getValue('general/locale/code', ScopeInterface::SCOPE_STORE, $storeId);
+        return $this->scopeConfig->getValue(
+            'general/locale/code',
+            ScopeInterface::SCOPE_WEBSITE,
+            $websiteId
+        );
     }
 
     /**

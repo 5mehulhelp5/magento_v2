@@ -19,7 +19,7 @@ class Request
 {
     protected $logger;
     protected $scopeConfig;
-    protected $storeId;
+    protected $websiteId;
 
     /**
      * Request constructor.
@@ -34,7 +34,8 @@ class Request
     ) {
         $this->logger = $logger;
         $this->scopeConfig = $scopeConfig;
-        $this->storeId = $storeManager->getStore()->getId();
+        $this->websiteId = $storeManager->getWebsite()->getId();
+
     }
 
     /**
@@ -44,7 +45,11 @@ class Request
      */
     public function afterGetAcceptTypes(RestRequest $subject, array $result): array
     {
-        $webhookUrlKey = $this->scopeConfig->getValue('payment/iyzipay/webhook_url_key', ScopeInterface::SCOPE_STORE, $this->storeId);
+        $webhookUrlKey = $this->scopeConfig->getValue(
+            'payment/iyzipay/webhook_url_key',
+            ScopeInterface::SCOPE_WEBSITE,
+            $this->websiteId
+        );
 
         if ($subject->getRequestUri() === ('/rest/V1/iyzico/webhook/' . $webhookUrlKey) || $subject->getRequestUri() === '/index.php/rest/V1/iyzico/callback/') {
             $result = ['text/html'];

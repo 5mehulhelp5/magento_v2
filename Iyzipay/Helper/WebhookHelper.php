@@ -23,16 +23,25 @@
 namespace Iyzico\Iyzipay\Helper;
 
 use Magento\Framework\App\Config\ScopeConfigInterface;
-use Magento\Framework\View\Element\Template\Context;
+use Magento\Store\Model\StoreManagerInterface;
 use Magento\Store\Model\ScopeInterface;
 
 class WebhookHelper
 {
-    private ScopeConfigInterface $config;
+    private ScopeConfigInterface $scopeConfig;
+    protected StoreManagerInterface $storeManager;
 
-    public function __construct(Context $context)
+    public function __construct(
+        StoreManagerInterface $storeManager,
+        ScopeConfigInterface $scopeConfig
+    ) {
+        $this->scopeConfig = $scopeConfig;
+        $this->storeManager = $storeManager;
+    }
+
+    public function getWebsiteId()
     {
-        $this->config = $context->getScopeConfig();
+        return $this->storeManager->getWebsite()->getId();
     }
 
     /**
@@ -42,7 +51,11 @@ class WebhookHelper
      */
     public function getWebhookUrl(): mixed
     {
-        return $this->config->getValue('payment/iyzipay/webhook_url_key', $this->getScopeInterface());
+        return $this->scopeConfig->getValue(
+            'payment/iyzipay/webhook_url_key',
+            $this->getScopeInterface(),
+            $this->getWebsiteId()
+        );
     }
 
     /**
@@ -52,7 +65,7 @@ class WebhookHelper
      */
     public function getScopeInterface(): string
     {
-        return ScopeInterface::SCOPE_STORE;
+        return ScopeInterface::SCOPE_WEBSITE;
     }
 
     /**
@@ -62,7 +75,11 @@ class WebhookHelper
      */
     public function getSecretKey(): mixed
     {
-        return $this->config->getValue('payment/iyzipay/secret_key', $this->getScopeInterface());
+        return $this->scopeConfig->getValue(
+            'payment/iyzipay/secret_key',
+            $this->getScopeInterface(),
+            $this->getWebsiteId()
+        );
     }
 
     /**

@@ -33,6 +33,7 @@ use Iyzico\Iyzipay\Model\ResourceModel\IyziOrderJob\CollectionFactory;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Sales\Api\OrderRepositoryInterface;
 use Magento\Store\Model\StoreManagerInterface;
+use Magento\Store\Model\ScopeInterface;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\Promise\Utils;
@@ -296,24 +297,24 @@ class ProcessPendingOrders
      */
     private function getPaymentDefinition()
     {
-        $storeId = $this->storeManager->getStore()->getId();
+        $websiteId = $this->storeManager->getWebsite()->getId();
 
         return [
             'rand' => uniqid(),
             'baseUrl' => $this->scopeConfig->getValue(
                 'payment/iyzipay/sandbox',
-                \Magento\Store\Model\ScopeInterface::SCOPE_STORE,
-                $storeId
+                ScopeInterface::SCOPE_WEBSITE,
+                $websiteId
             ) ? 'https://sandbox-api.iyzipay.com' : 'https://api.iyzipay.com',
             'apiKey' => $this->scopeConfig->getValue(
                 'payment/iyzipay/api_key',
-                \Magento\Store\Model\ScopeInterface::SCOPE_STORE,
-                $storeId
+                ScopeInterface::SCOPE_WEBSITE,
+                $websiteId
             ),
             'secretKey' => $this->scopeConfig->getValue(
                 'payment/iyzipay/secret_key',
-                \Magento\Store\Model\ScopeInterface::SCOPE_STORE,
-                $storeId
+                ScopeInterface::SCOPE_WEBSITE,
+                $websiteId
             )
         ];
     }

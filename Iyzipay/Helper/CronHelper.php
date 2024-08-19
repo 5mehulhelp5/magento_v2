@@ -7,6 +7,7 @@ use Magento\Store\Model\ScopeInterface;
 use Magento\Framework\App\Config\Storage\WriterInterface;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Store\Model\StoreManagerInterface;
+use Magento\Framework\App\Helper\Context;
 
 class CronHelper extends AbstractHelper
 {
@@ -16,10 +17,10 @@ class CronHelper extends AbstractHelper
 
     protected $configWriter;
     protected $scopeConfig;
-    protected $storeId;
+    protected $websiteId;
 
     public function __construct(
-        \Magento\Framework\App\Helper\Context $context,
+        Context $context,
         WriterInterface $configWriter,
         ScopeConfigInterface $scopeConfig,
         StoreManagerInterface $storeManager
@@ -27,19 +28,27 @@ class CronHelper extends AbstractHelper
         parent::__construct($context);
         $this->configWriter = $configWriter;
         $this->scopeConfig = $scopeConfig;
-        $this->storeId = $storeManager->getStore()->getId();
+        $this->websiteId = $storeManager->getWebsite()->getId();
     }
 
     public function getCronSchedule()
     {
-        $commonSettings = $this->scopeConfig->getValue(self::XML_PATH_COMMON_CRON_SETTINGS, ScopeInterface::SCOPE_STORE, $this->storeId);
+        $commonSettings = $this->scopeConfig->getValue(
+            self::XML_PATH_COMMON_CRON_SETTINGS,
+            ScopeInterface::SCOPE_WEBSITE,
+            $this->websiteId
+        );
 
         if ($commonSettings && $commonSettings !== 'custom') {
             $this->saveEffectiveCronSchedule($commonSettings);
             return $commonSettings;
         }
 
-        $customCronSettings = $this->scopeConfig->getValue(self::XML_PATH_CUSTOM_CRON_SETTINGS, ScopeInterface::SCOPE_STORE, $this->storeId);
+        $customCronSettings = $this->scopeConfig->getValue(
+            self::XML_PATH_CUSTOM_CRON_SETTINGS,
+            ScopeInterface::SCOPE_WEBSITE,
+            $this->websiteId
+        );
 
         if ($customCronSettings) {
             $this->saveEffectiveCronSchedule($customCronSettings);
@@ -51,7 +60,17 @@ class CronHelper extends AbstractHelper
 
     private function saveEffectiveCronSchedule($schedule)
     {
-        $this->configWriter->save(self::XML_PATH_EFFECTIVE_CRON_SCHEDULE, $schedule, ScopeConfigInterface::SCOPE_TYPE_DEFAULT, $this->storeId);
-        $this->configWriter->save(self::XML_PATH_EFFECTIVE_CRON_SCHEDULE, $schedule, ScopeInterface::SCOPE_STORE, $this->storeId);
+        $this->configWriter->save(
+            self::XML_PATH_EFFECTIVE_CRON_SCHEDULE,
+            $schedule,
+            ScopeInterface::SCOPE_WEBSITE,
+            $this->websiteId
+        );
+        $this->configWriter->save(
+            self::XML_PATH_EFFECTIVE_CRON_SCHEDULE,
+            $schedule,
+            ScopeInterface::SCOPE_WEBSITE,
+            $this->websiteId
+        );
     }
 }

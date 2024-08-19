@@ -24,54 +24,63 @@ namespace Iyzico\Iyzipay\Observer;
 use Magento\Framework\Event\ObserverInterface;
 use Magento\Framework\Event\Observer as EventObserver;
 use Magento\Framework\App\Config\ScopeConfigInterface;
+use Magento\Framework\App\Config\Storage\WriterInterface;
+use Magento\Framework\App\Request\Http;
+use Magento\Store\Model\StoreManagerInterface;
+use Magento\Store\Model\ScopeInterface;
+
 use Iyzico\Iyzipay\Controller\IyzicoBase\IyzicoPkiStringBuilder;
 use Iyzico\Iyzipay\Controller\IyzicoBase\IyzicoRequest;
+use Iyzico\Iyzipay\Helper\IyzicoHelper;
 use stdClass;
+
 
 class IyzipayConfigSaveBefore implements ObserverInterface
 {
 
-    protected $_scopeConfig;
-    protected $_storeManager;
-    protected $_iyzicoHelper;
-    protected $_configWriter;
-    protected $_request;
+    protected $scopeConfig;
+    protected $storeManager;
+    protected $iyzicoHelper;
+    protected $configWriter;
+    protected $request;
 
     public function __construct(
-        \Magento\Framework\App\Config\ScopeConfigInterface $scopeConfig,
-        \Magento\Store\Model\StoreManagerInterface $storeManager,
-        \Iyzico\Iyzipay\Helper\IyzicoHelper $iyzicoHelper,
-        \Magento\Framework\App\Config\Storage\WriterInterface $configWriter,
-        \Magento\Framework\App\Request\Http $request
+        ScopeConfigInterface $scopeConfig,
+        StoreManagerInterface $storeManager,
+        IyzicoHelper $iyzicoHelper,
+        WriterInterface $configWriter,
+        Http $request
     ) {
-        $this->_scopeConfig = $scopeConfig;
-        $this->_storeManager = $storeManager;
-        $this->_iyzicoHelper = $iyzicoHelper;
-        $this->_configWriter = $configWriter;
-        $this->_request = $request;
+        $this->scopeConfig = $scopeConfig;
+        $this->storeManager = $storeManager;
+        $this->iyzicoHelper = $iyzicoHelper;
+        $this->configWriter = $configWriter;
+        $this->request = $request;
     }
 
     public function execute(EventObserver $observer)
     {
+        $this->webhookUrlKey();
+        $this->webhookSetControll();
 
-
-        $postData = $this->_request->getPostValue();
-        $this->webhookUrlKey($postData);
-        $this->webhookSetControll($postData);
+        $postData = $this->request->getPostValue();
         $this->initSetWebhookUrlKey($postData);
 
         if (!empty($postData['groups']['iyzipay']['fields']['active'])) {
-
 
             $apiKey = $postData['groups']['iyzipay']['fields']['api_key']['value'];
             $secretKey = $postData['groups']['iyzipay']['fields']['secret_key']['value'];
             $randNumer = rand(100000, 99999999);
 
-            $storeId = $this->_storeManager->getStore()->getId();
-            $locale = $this->_scopeConfig->getValue('general/locale/code', \Magento\Store\Model\ScopeInterface::SCOPE_STORE, $storeId);
+            $websiteId = $this->storeManager->getWebsite()->getId();
+            $locale = $this->scopeConfig->getValue(
+                'general/locale/code',
+                ScopeInterface::SCOPE_WEBSITE,
+                $websiteId
+            );
 
             $overlayObject = new stdClass();
-            $overlayObject->locale = $this->_iyzicoHelper->cutLocale($locale);
+            $overlayObject->locale = $this->iyzicoHelper->cutLocale($locale);
             $overlayObject->conversationId = $randNumer;
             $overlayObject->position = $postData['groups']['iyzipay']['fields']['overlayscript']['value'];
 
@@ -87,7 +96,12 @@ class IyzipayConfigSaveBefore implements ObserverInterface
 
             if ($requestResponse->status == 'success') {
 
-                $this->_configWriter->save('payment/iyzipay/protectedShopId', $requestResponse->protectedShopId, $scope = ScopeConfigInterface::SCOPE_TYPE_DEFAULT, $scopeId = 0);
+                $this->configWriter->save(
+                    'payment/iyzipay/protectedShopId',
+                    $requestResponse->protectedShopId,
+                    ScopeInterface::SCOPE_WEBSITE,
+                    $websiteId
+                );
 
             }
 
@@ -97,24 +111,36 @@ class IyzipayConfigSaveBefore implements ObserverInterface
 
     public function initSetWebhookUrlKey($postData)
     {
-
-        $webhookActive = $this->_scopeConfig->getValue('payment/iyzipay/webhook_url_key_active');
+        $websiteId = $this->storeManager->getWebsite()->getId();
+        $webhookActive = $this->scopeConfig->getValue(
+            'payment/iyzipay/webhook_url_key_active',
+            ScopeInterface::SCOPE_WEBSITE,
+            $websiteId
+        );
         if ($webhookActive == 0) {
             $apiKey = $postData['groups']['iyzipay']['fields']['api_key']['value'];
             $secretKey = $postData['groups']['iyzipay']['fields']['secret_key']['value'];
             if (isset($apiKey) && isset($secretKey)) {
                 $randNumer = rand(100000, 99999999);
-                $sandboxStatus = $this->_scopeConfig->getValue('payment/iyzipay/sandbox');
+                $sandboxStatus = $this->scopeConfig->getValue(
+                    'payment/iyzipay/sandbox',
+                    ScopeInterface::SCOPE_WEBSITE,
+                    $websiteId
+                );
                 $baseUrl = 'https://api.iyzipay.com';
 
                 if ($sandboxStatus)
                     $baseUrl = 'https://sandbox-api.iyzipay.com';
 
 
-                $webhook_url_key = $this->_scopeConfig->getValue('payment/iyzipay/webhook_url_key');
+                $webhook_url_key = $this->scopeConfig->getValue(
+                    'payment/iyzipay/webhook_url_key',
+                    ScopeInterface::SCOPE_WEBSITE,
+                    $websiteId
+                );
 
                 $setWebhookUrl = new stdClass();
-                $setWebhookUrl->webhookUrl = $this->_storeManager->getStore()->getBaseUrl() . 'rest/V1/iyzico/webhook/' . $webhook_url_key;
+                $setWebhookUrl->webhookUrl = $this->storeManager->getStore()->getBaseUrl() . 'rest/V1/iyzico/webhook/' . $webhook_url_key;
 
                 $iyzicoPkiStringBuilder = new IyzicoPkiStringBuilder();
                 $iyzicoRequest = new IyzicoRequest();
@@ -127,10 +153,20 @@ class IyzipayConfigSaveBefore implements ObserverInterface
                 $requestResponseWebhook = $iyzicoRequest->iyzicoPostWebhookUrlKey($baseUrl, $iyzicoJson, $authorization);
                 $requestResponseWebhook->merchantNotificationUpdateStatus == 'UPDATED';
                 if ($requestResponseWebhook->merchantNotificationUpdateStatus == 'UPDATED' || $requestResponseWebhook->merchantNotificationUpdateStatus == 'CREATED') {
-                    $this->_configWriter->save('payment/iyzipay/webhook_url_key_active', '1', $scope = ScopeConfigInterface::SCOPE_TYPE_DEFAULT, $scopeId = 0);
+                    $this->configWriter->save(
+                        'payment/iyzipay/webhook_url_key_active',
+                        '1',
+                        ScopeInterface::SCOPE_WEBSITE,
+                        $websiteId
+                    );
 
                 } else {
-                    return $this->_configWriter->save('payment/iyzipay/webhook_url_key_active', '2', $scope = ScopeConfigInterface::SCOPE_TYPE_DEFAULT, $scopeId = 0);
+                    return $this->configWriter->save(
+                        'payment/iyzipay/webhook_url_key_active',
+                        '2',
+                        ScopeInterface::SCOPE_WEBSITE,
+                        $websiteId
+                    );
 
                 }
             }
@@ -140,23 +176,41 @@ class IyzipayConfigSaveBefore implements ObserverInterface
     }
 
 
-    public function webhookSetControll($postData)
+    public function webhookSetControll()
     {
-
-        $webhookActive = $this->_scopeConfig->getValue('payment/iyzipay/webhook_url_key_active');
+        $websiteId = $this->storeManager->getWebsite()->getId();
+        $webhookActive = $this->scopeConfig->getValue(
+            'payment/iyzipay/webhook_url_key_active',
+            ScopeInterface::SCOPE_WEBSITE,
+            $websiteId
+        );
         if (!$webhookActive) {
-            $this->_configWriter->save('payment/iyzipay/webhook_url_key_active', '0', $scope = ScopeConfigInterface::SCOPE_TYPE_DEFAULT, $scopeId = 0);
+            $this->configWriter->save(
+                'payment/iyzipay/webhook_url_key_active',
+                '0',
+                ScopeInterface::SCOPE_WEBSITE,
+                $websiteId
+            );
         }
     }
 
 
-    public function webhookUrlKey($postData)
+    public function webhookUrlKey()
     {
-
-        $webhookUrlKey = $this->_scopeConfig->getValue('payment/iyzipay/webhook_url_key');
+        $websiteId = $this->storeManager->getWebsite()->getId();
+        $webhookUrlKey = $this->scopeConfig->getValue(
+            'payment/iyzipay/webhook_url_key',
+            ScopeInterface::SCOPE_WEBSITE,
+            $websiteId
+        );
         if (!$webhookUrlKey) {
             $webhookUrlKeyUniq = substr(base64_encode(time() . mt_rand()), 15, 6);
-            $this->_configWriter->save('payment/iyzipay/webhook_url_key', $webhookUrlKeyUniq, $scope = ScopeConfigInterface::SCOPE_TYPE_DEFAULT, $scopeId = 0);
+            $this->configWriter->save(
+                'payment/iyzipay/webhook_url_key',
+                $webhookUrlKeyUniq,
+                ScopeInterface::SCOPE_WEBSITE,
+                $websiteId
+            );
 
         }
     }
