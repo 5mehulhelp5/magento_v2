@@ -47,15 +47,15 @@ class IyzipayWebhookField extends Field
 
     public function __construct(
         Context $context,
-        array $data = [],
-        ?SecureHtmlRenderer $secureRenderer = null,
         StoreManagerInterface $storeManager,
-        ScopeConfigInterface $scopeConfig
+        ScopeConfigInterface $scopeConfig,
+        array $data = [],
+        ?SecureHtmlRenderer $secureRenderer = null
     ) {
-        parent::__construct($context, $data);
-        $this->secureRenderer = $secureRenderer ?? ObjectManager::getInstance()->get(SecureHtmlRenderer::class);
         $this->storeManager = $storeManager;
         $this->scopeConfig = $scopeConfig;
+        parent::__construct($context, $data);
+        $this->secureRenderer = $secureRenderer ?? ObjectManager::getInstance()->get(SecureHtmlRenderer::class);
     }
 
     /**
