@@ -356,6 +356,9 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
      */
     private function findOrderStatusDetails(string $iyziEventType, string $status, string $paymentStatus): array
     {
+
+        $this->errorLogger->info("iyziEventType: $iyziEventType - status: $status - paymentStatus: $paymentStatus", ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+
         if ($iyziEventType === 'BANK_TRANSFER_AUTH' && $status === 'success') {
             return [
                 'state' => 'processing',
