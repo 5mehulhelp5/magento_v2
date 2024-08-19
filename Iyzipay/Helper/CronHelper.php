@@ -35,7 +35,7 @@ class CronHelper extends AbstractHelper
     {
         $commonSettings = $this->scopeConfig->getValue(
             self::XML_PATH_COMMON_CRON_SETTINGS,
-            ScopeInterface::SCOPE_WEBSITE,
+            ScopeInterface::SCOPE_WEBSITES,
             $this->websiteId
         );
 
@@ -46,7 +46,7 @@ class CronHelper extends AbstractHelper
 
         $customCronSettings = $this->scopeConfig->getValue(
             self::XML_PATH_CUSTOM_CRON_SETTINGS,
-            ScopeInterface::SCOPE_WEBSITE,
+            ScopeInterface::SCOPE_WEBSITES,
             $this->websiteId
         );
 
@@ -63,13 +63,13 @@ class CronHelper extends AbstractHelper
         $this->configWriter->save(
             self::XML_PATH_EFFECTIVE_CRON_SCHEDULE,
             $schedule,
-            ScopeInterface::SCOPE_WEBSITE,
+            ScopeInterface::SCOPE_WEBSITES,
             $this->websiteId
         );
         $this->configWriter->save(
             self::XML_PATH_EFFECTIVE_CRON_SCHEDULE,
             $schedule,
-            ScopeInterface::SCOPE_WEBSITE,
+            ScopeInterface::SCOPE_WEBSITES,
             $this->websiteId
         );
     }
