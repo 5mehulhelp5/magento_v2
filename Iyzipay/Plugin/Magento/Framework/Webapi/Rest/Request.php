@@ -54,8 +54,13 @@ class Request
         $this->logger->info('Request.php Webhook URL Key: ' . $webhookUrlKey ?? 'null');
 
         if ($subject->getRequestUri() === ('/rest/V1/iyzico/webhook/' . $webhookUrlKey) || $subject->getRequestUri() === '/index.php/rest/V1/iyzico/callback/') {
+            $this->logger->info("Request.php subject->getRequestUri: " . $subject->getRequestUri());
+            $this->logger->info("Request.php /rest/V1/iyzico/webhook/$webhookUrlKey: " . ('/rest/V1/iyzico/webhook/' . $webhookUrlKey));
+            $this->logger->info("subject->getRequestUri === /rest/V1/iyzico/webhook/$webhookUrlKey" . ($subject->getRequestUri() === ('/rest/V1/iyzico/webhook/' . $webhookUrlKey)));
             $result = ['text/html'];
         }
+
+        $this->logger->info('Request.php result: ' . print_r($result, true));
 
         return $result;
     }
