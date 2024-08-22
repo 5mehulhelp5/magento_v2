@@ -80,3 +80,5 @@
 
 "Payment ID: ","Payment ID",
 "Conversation ID: ","Conversation ID"
+
+"INIT_BANK_TRANSFER_CRON", "Bank transfer payment is pending."

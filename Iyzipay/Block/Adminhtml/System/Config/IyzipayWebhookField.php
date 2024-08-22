@@ -78,11 +78,7 @@ class IyzipayWebhookField extends Field
             $websiteId
         );
 
-        $this->logger->info('websiteId: ' . $websiteId ?? 'null');
-        $this->logger->info('Webhook URL Key: ' . $webhookUrlKey ?? 'null');
-
         if ($webhookUrlKey) {
-            $this->logger->info('Webhook URL: ' . $this->_storeManager->getStore()->getBaseUrl() . 'rest/V1/iyzico/webhook/' . $webhookUrlKey);
             return $this->_storeManager->getStore()->getBaseUrl() . 'rest/V1/iyzico/webhook/' . $webhookUrlKey . '<br>' . $this->getWebhookSubmitButtonHtml();
         } else {
             return 'Clear cookies and then push the "Save Config" button';

@@ -76,3 +76,5 @@
 "SECOND", "saniye"
 "RETURN_HOME", "Ana Sayfaya Dön"
 "RETURN_CART", "Sepete Dön"
+
+"INIT_BANK_TRANSFER_CRON", "Banka havalesi ile ödeme işlemi bekleniyor."

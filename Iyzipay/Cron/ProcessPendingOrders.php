@@ -80,41 +80,38 @@ class ProcessPendingOrders
             $page = 1;
             $processedCount = 0;
             $ordersToDelete = [];
+            $totalPages = $this->getTotalPages();
 
-            do {
+            while ($page <= $totalPages) {
                 $orders = $this->getPageOfOrders($page);
                 $ordersCount = count($orders);
 
                 if ($ordersCount > 0) {
                     $this->processOrders($orders, $ordersToDelete);
                     $processedCount += $ordersCount;
-                    $page++;
                 }
 
                 $this->cronLogger->info("Processed batch", [
-                    'page' => $page - 1,
+                    'page' => $page,
                     'processed_count' => $ordersCount,
                     'total_processed' => $processedCount
                 ]);
 
-            } while ($ordersCount > 0);
+                $page++;
+            }
 
             if (!empty($ordersToDelete)) {
                 $this->deleteProcessedOrders($ordersToDelete);
             }
 
-            if ($processedCount == 0) {
-                $this->cronLogger->info("No orders processed in this run.");
-            } else {
-                $this->cronLogger->info("Cron job completed", ['total_processed' => $processedCount]);
-            }
+            $this->cronLogger->info('Iyzico cron job completed', ['total_processed' => $processedCount]);
 
-            $this->cronLogger->info('Iyzico cron job completed');
+            return ['success' => true, 'message' => "Processed $processedCount orders"];
 
         } catch (\Exception $e) {
             $this->cronLogger->error('Iyzico cron job failed: ' . $e->getMessage());
+            return ['success' => false, 'message' => $e->getMessage()];
         }
-        return [];
     }
 
     private function getPageOfOrders($page)
@@ -264,7 +261,7 @@ class ProcessPendingOrders
             return ['state' => "processing", 'status' => "processing", 'comment' => __("SUCCESS")];
 
         if ($paymentStatus == 'INIT_BANK_TRANSFER' && $status == 'success')
-            return ['state' => "pending_payment", 'status' => "pending_payment", 'comment' => __("INIT_BANK_TRANSFER")];
+            return ['state' => "pending_payment", 'status' => "pending_payment", 'comment' => __("INIT_BANK_TRANSFER_CRON")];
 
         if ($paymentStatus == 'PENDING_CREDIT' && $status == 'success')
             return ['state' => "pending_payment", 'status' => "pending_payment", 'comment' => __("PENDING_CREDIT")];
@@ -348,5 +345,19 @@ class ProcessPendingOrders
         return $this->pkiStringBuilderFactory->create();
     }
 
+
+    /**
+     * Summary of getTotalPages
+     * @return float
+     */
+    private function getTotalPages()
+    {
+        $totalItems = $this->collection
+            ->addFieldToFilter('status', ['in' => ['pending_payment', 'received']])
+            ->addFieldToFilter('is_controlled', ['eq' => 0])
+            ->getSize();
+
+        return ceil($totalItems / self::PAGE_SIZE);
+    }
 
 }
