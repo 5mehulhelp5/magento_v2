@@ -25,7 +25,7 @@ use Magento\Quote\Api\Data\CartInterface;
 
 class Iyzipay extends \Magento\Payment\Model\Method\AbstractMethod
 {
-    const PLUGIN_VERSION = '2.0.2';
+    const PLUGIN_VERSION = '2.1.0';
     protected $_code = "iyzipay";
     protected $_isOffline = true;
 
