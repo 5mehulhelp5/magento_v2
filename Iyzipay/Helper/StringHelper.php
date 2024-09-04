@@ -54,10 +54,10 @@ class StringHelper
     /**
      * Generate Conversation Id
      *
-     * @param int $quoteId
+     * @param mixed $quoteId
      * @return string
      */
-    public function generateConversationId(int $quoteId): string
+    public function generateConversationId(mixed $quoteId): string
     {
         return 'QI' . $quoteId . 'T' . time();
     }

@@ -49,6 +49,11 @@ use Magento\Quote\Model\Quote;
 use Magento\Store\Model\ScopeInterface;
 use Magento\Store\Model\StoreManagerInterface;
 use Magento\Sales\Api\OrderRepositoryInterface;
+use Magento\Quote\Model\QuoteFactory;
+use Magento\Quote\Model\Quote\ItemFactory as QuoteItemFactory;
+use Magento\Quote\Model\Quote\AddressFactory;
+use Magento\Catalog\Api\ProductRepositoryInterface;
+use Magento\Customer\Api\CustomerRepositoryInterface;
 
 class IyzipayRequest extends Action
 {
@@ -68,6 +73,11 @@ class IyzipayRequest extends Action
     protected OrderRepositoryInterface $orderRepository;
     protected PkiStringBuilderFactory $pkiStringBuilderFactory;
     protected RequestHelperFactory $requestHelperFactory;
+    protected QuoteFactory $quoteFactory;
+    protected QuoteItemFactory $quoteItemFactory;
+    protected $quoteAddressFactory;
+    protected $productRepository;
+    protected $customerRepository;
 
     public function __construct
     (
@@ -85,7 +95,12 @@ class IyzipayRequest extends Action
         Quote $quote,
         IyziErrorLogger $errorLogger,
         PkiStringBuilderFactory $pkiStringBuilderFactory,
-        RequestHelperFactory $requestHelperFactory
+        RequestHelperFactory $requestHelperFactory,
+        QuoteFactory $quoteFactory,
+        QuoteItemFactory $quoteItemFactory,
+        AddressFactory $quoteAddressFactory,
+        ProductRepositoryInterface $productRepository,
+        CustomerRepositoryInterface $customerRepository
     ) {
         $this->checkoutSession = $checkoutSession;
         $this->customerSession = $customerSession;
@@ -101,6 +116,11 @@ class IyzipayRequest extends Action
         $this->errorLogger = $errorLogger;
         $this->pkiStringBuilderFactory = $pkiStringBuilderFactory;
         $this->requestHelperFactory = $requestHelperFactory;
+        $this->quoteFactory = $quoteFactory;
+        $this->quoteItemFactory = $quoteItemFactory;
+        $this->quoteAddressFactory = $quoteAddressFactory;
+        $this->productRepository = $productRepository;
+        $this->customerRepository = $customerRepository;
         parent::__construct($context);
     }
 
@@ -112,10 +132,14 @@ class IyzipayRequest extends Action
      * @throws NoSuchEntityException
      * @throws LocalizedException
      */
-    public function execute()
+    public function execute($order = null)
     {
+        if ($order) {
+            return $this->processPaymentRequest($order);
+        }
         return $this->processPaymentRequest();
     }
+
 
     /**
      * Process Payment Request
@@ -126,7 +150,7 @@ class IyzipayRequest extends Action
      * @throws LocalizedException
      * @throws NoSuchEntityException
      */
-    private function processPaymentRequest()
+    private function processPaymentRequest($order = null)
     {
         $defination = $this->getPaymentDefinition();
 
@@ -135,15 +159,25 @@ class IyzipayRequest extends Action
         $requestHelper = $this->getRequestHelper();
         $cookieHelper = $this->getCookieHelper();
 
-        $postData = $this->getRequest()->getPostValue();
-        $customerMail = $postData['iyziQuoteEmail'] ?? null;
-        $customerBasketId = $postData['iyziQuoteId'] ?? null;
-        $checkoutSession = $this->checkoutSession->getQuote();
+        if ($order) {
+            $checkoutSession = $this->createQuoteFromOrder($order);
+            $customerMail = $order->getCustomerEmail();
+            $customerBasketId = $order->getQuoteId();
+            $quoteId = $order->getQuoteId();
+            $orderId = $order->getId();
+        } else {
+            $postData = $this->getRequest()->getPostValue();
+            $customerMail = $postData['iyziQuoteEmail'] ?? null;
+            $customerBasketId = $postData['iyziQuoteId'] ?? null;
+            $checkoutSession = $this->checkoutSession->getQuote();
+            $quoteId = $checkoutSession->getId();
+            $orderId = $this->placeOrder();
+        }
+
         $websiteId = $this->storeManager->getWebsite()->getId();
         $locale = $this->getLocale($websiteId);
         $currency = $this->getCurrency();
         $callBack = $this->getCallbackUrl();
-        $quoteId = $checkoutSession->getId();
         $magentoVersion = $this->getMagentoVersion();
 
         $cookieHelper->ensureCookiesSameSite();
@@ -156,7 +190,7 @@ class IyzipayRequest extends Action
             $this->storeSessionData($customerMail, $customerBasketId);
         }
 
-        $iyzico = $this->createPaymentOption($objectHelper, $checkoutSession, $defination['customerCardUserKey'], $locale, $conversationId, $currency, $quoteId, $callBack, $magentoVersion);
+        $iyzico = $this->createPaymentOption($objectHelper, $checkoutSession, $defination['customerCardUserKey'], $locale, $conversationId, $currency, $quoteId, $orderId, $callBack, $magentoVersion);
         $orderObject = $pkiStringBuilder->sortFormObject($iyzico);
         $iyzicoPkiString = $pkiStringBuilder->generatePkiString($orderObject);
         $authorization = $pkiStringBuilder->generateAuthorization($iyzicoPkiString, $defination['apiKey'], $defination['secretKey'], $defination['rand']);
@@ -164,7 +198,11 @@ class IyzipayRequest extends Action
         $iyzicoJson = json_encode($iyzico, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         $requestResponse = $requestHelper->sendCheckoutFormRequest($defination['baseUrl'], $iyzicoJson, $authorization);
 
-        $result = $this->handleRequestResponse($requestResponse);
+        if ($order) {
+            return $requestResponse;
+        }
+
+        $result = $this->handleRequestResponse($requestResponse, $orderId);
 
         return $this->createJsonResult($result);
     }
@@ -381,9 +419,9 @@ class IyzipayRequest extends Action
      * @param $callBack
      * @param $magentoVersion
      */
-    private function createPaymentOption($objectHelper, $checkoutSession, $customerCardUserKey, $locale, $conversationId, $currency, $quoteId, $callBack, $magentoVersion)
+    private function createPaymentOption($objectHelper, $checkoutSession, $customerCardUserKey, $locale, $conversationId, $currency, $quoteId, $orderId, $callBack, $magentoVersion)
     {
-        $iyzico = $objectHelper->createPaymentOption($checkoutSession, $customerCardUserKey, $locale, $conversationId, $currency, $quoteId, $callBack, $magentoVersion);
+        $iyzico = $objectHelper->createPaymentOption($checkoutSession, $customerCardUserKey, $locale, $conversationId, $currency, $quoteId, $orderId, $callBack, $magentoVersion);
         $iyzico->buyer = $objectHelper->createBuyerObject($checkoutSession, $this->customerSession->getEmail());
         $iyzico->billingAddress = $objectHelper->createBillingAddressObject($checkoutSession);
         $iyzico->shippingAddress = $objectHelper->createShippingAddressObject($checkoutSession);
@@ -404,10 +442,10 @@ class IyzipayRequest extends Action
      * @throws NoSuchEntityException
      * @throws Exception
      */
-    private function handleRequestResponse($requestResponse)
+    private function handleRequestResponse($requestResponse, $orderId)
     {
         if (isset($requestResponse->status) && $requestResponse->status == 'success') {
-            return $this->processSuccessfulResponse($requestResponse);
+            return $this->processSuccessfulResponse($requestResponse, $orderId);
         } elseif (isset($requestResponse->errorCode)) {
             return $this->processErrorResponse($requestResponse);
         } elseif ($requestResponse === null) {
@@ -432,10 +470,9 @@ class IyzipayRequest extends Action
      * @throws CouldNotSaveException
      * @throws LocalizedException
      */
-    private function processSuccessfulResponse($requestResponse)
+    private function processSuccessfulResponse($requestResponse, $orderId)
     {
         $this->quote = $this->checkoutSession->getQuote();
-        $orderId = $this->placeOrder();
         $quoteId = $this->quote->getId();
 
         $this->saveIyziOrderJobTable($requestResponse, $orderId, $quoteId);
@@ -451,6 +488,7 @@ class IyzipayRequest extends Action
      */
     private function placeOrder()
     {
+        $this->quote = $this->checkoutSession->getQuote();
         if ($this->customerSession->isLoggedIn()) {
             $orderId = $this->cartManagement->placeOrder($this->quote->getId());
         } else {
@@ -463,7 +501,7 @@ class IyzipayRequest extends Action
         $comment = __("START_ORDER");
 
         $order->setState('pending_payment')->setStatus('pending_payment');
-        $order->addStatusHistoryComment($comment);
+        $order->addCommentToStatusHistory($comment);
         $order->getPayment()->setMethod('iyzipay');
 
         $this->orderRepository->save($order);
@@ -557,6 +595,75 @@ class IyzipayRequest extends Action
     {
         $resultJson = $this->resultJsonFactory->create();
         return $resultJson->setData($result);
+    }
+
+    private function createQuoteFromOrder($order)
+    {
+        /** @var \Magento\Quote\Model\Quote $quote */
+        $quote = $this->quoteFactory->create();
+        $quote->setStoreId($order->getStoreId());
+
+        // Add items to quote
+        foreach ($order->getAllVisibleItems() as $item) {
+            $product = $this->productRepository->getById($item->getProductId());
+            $quoteItem = $this->quoteItemFactory->create();
+            $quoteItem->setProduct($product);
+            $quoteItem->setQty($item->getQtyOrdered());
+            $quote->addItem($quoteItem);
+        }
+
+        // Set addresses
+        $billingAddress = $order->getBillingAddress();
+        if ($billingAddress) {
+            /** @var \Magento\Quote\Model\Quote\Address $quoteBillingAddress */
+            $quoteBillingAddress = $this->quoteAddressFactory->create();
+            $this->copyAddressData($billingAddress, $quoteBillingAddress);
+            $quote->setBillingAddress($quoteBillingAddress);
+        }
+
+        $shippingAddress = $order->getShippingAddress();
+        if ($shippingAddress) {
+            /** @var \Magento\Quote\Model\Quote\Address $quoteShippingAddress */
+            $quoteShippingAddress = $this->quoteAddressFactory->create();
+            $this->copyAddressData($shippingAddress, $quoteShippingAddress);
+            $quote->setShippingAddress($quoteShippingAddress);
+        }
+
+        // Set customer information
+        $quote->setCustomerEmail($order->getCustomerEmail());
+        $quote->setCustomerIsGuest($order->getCustomerIsGuest());
+
+        if (!$order->getCustomerIsGuest()) {
+            $customer = $this->customerRepository->getById($order->getCustomerId());
+            $quote->setCustomer($customer);
+        }
+
+        // Set payment
+        $payment = $order->getPayment();
+        if ($payment) {
+            $quotePayment = $quote->getPayment();
+            $quotePayment->setMethod($payment->getMethod());
+            // You may need to set additional payment data here
+        }
+
+        $quote->collectTotals();
+
+        return $quote;
+    }
+
+    private function copyAddressData($sourceAddress, $targetAddress)
+    {
+        $targetAddress->setFirstname($sourceAddress->getFirstname());
+        $targetAddress->setLastname($sourceAddress->getLastname());
+        $targetAddress->setStreet($sourceAddress->getStreet());
+        $targetAddress->setCity($sourceAddress->getCity());
+        $targetAddress->setCountryId($sourceAddress->getCountryId());
+        $targetAddress->setPostcode($sourceAddress->getPostcode());
+        $targetAddress->setTelephone($sourceAddress->getTelephone());
+        $targetAddress->setRegion($sourceAddress->getRegion());
+        $targetAddress->setRegionCode($sourceAddress->getRegionCode());
+        $targetAddress->setRegionId($sourceAddress->getRegionId());
+        $targetAddress->setCompany($sourceAddress->getCompany());
     }
 
 }

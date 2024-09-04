@@ -15,7 +15,7 @@ class ObjectHelper
         $this->priceHelper = $priceHelper;
     }
 
-    public function createPaymentOption($checkoutSession, $cardUserKey, $locale, $conversationId, $currency, $quoteId, $callBack, $magentoVersion): stdClass
+    public function createPaymentOption($checkoutSession, $cardUserKey, $locale, $conversationId, $currency, $quoteId, $orderId, $callBack, $magentoVersion): stdClass
     {
         $object = new stdClass();
 
@@ -30,7 +30,7 @@ class ObjectHelper
         $object->callbackUrl = $callBack . "Iyzico_Iyzipay/response/iyzipayresponse";
         $object->cardUserKey = $cardUserKey;
         $object->paymentSource = "MAGENTO2|" . $magentoVersion . "|SPACE-2.0.2";
-        $object->goBackUrl = $callBack;
+        $object->goBackUrl = $callBack . 'iyzipay/order?order_id=' . $orderId;
 
         return $object;
     }
@@ -44,7 +44,7 @@ class ObjectHelper
 
         $object = new stdClass();
 
-        $object->id = $billingAddress->getId();
+        $object->id = md5($email);
         $object->name = $this->stringHelper->validateString($billingAddress->getName());
         $object->surname = $this->stringHelper->validateString($billingAddress->getName());
         $object->identityNumber = "11111111111";

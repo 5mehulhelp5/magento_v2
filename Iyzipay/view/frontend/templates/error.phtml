@@ -39,32 +39,32 @@
 </style>
 
 <div class="iyzipay-error-container">
-    <h2><?= $block->escapeHtml(__('SORRY_MESSAGE')) ?></h2>
+    <h2><?= $escaper->escapeHtml(__('SORRY_MESSAGE')) ?></h2>
     <div class="iyzipay-error-details">
         <p class="iyzipay-error-code">
             <strong>
-                <?= $block->escapeHtml(__('ERROR_CODE')) ?>
+                <?= $escaper->escapeHtml(__('ERROR_CODE')) ?>
             </strong>
-            <?= $block->escapeHtml($block->getErrorCode()) ?>
+            <?= $escaper->escapeHtml($block->getErrorCode()) ?>
         </p>
         <p class="iyzipay-error-message">
             <strong>
-                <?= $block->escapeHtml(__('ERROR_MESSAGE')) ?>
+                <?= $escaper->escapeHtml(__('ERROR_MESSAGE')) ?>
             </strong>
-            <?= $block->escapeHtml($block->getErrorMessage()) ?>
+            <?= $escaper->escapeHtml($block->getErrorMessage()) ?>
         </p>
     </div>
     <p>
-        <?= $block->escapeHtml(__('REDIRECT_MESSAGE')) ?>
+        <?= $escaper->escapeHtml(__('REDIRECT_MESSAGE')) ?>
         <span id="iyzipay-countdown">60</span>
-        <?= $block->escapeHtml(__('SECOND')) ?>
+        <?= $escaper->escapeHtml(__('SECOND')) ?>
     </p>
     <div class="iyzipay-actions">
-        <a href="<?= $block->escapeUrl($block->getUrl('')) ?>">
-            <?= $block->escapeHtml(__('RETURN_HOME')) ?>
+        <a href="<?= $escaper->escapeUrl($block->getUrl('')) ?>">
+            <?= $escaper->escapeHtml(__('RETURN_HOME')) ?>
         </a>
-        <a style="margin-left: 10px;" href="<?= $block->escapeUrl($block->getCartUrl()) ?>">
-            <?= $block->escapeHtml(__('RETURN_CART')) ?>
+        <a style="margin-left: 10px;" href="<?= $escaper->escapeUrl($block->getCartUrl()) ?>">
+            <?= $escaper->escapeHtml(__('RETURN_CART')) ?>
         </a>
     </div>
 </div>
@@ -72,7 +72,7 @@
 <script>
     require(['jquery'], function ($) {
         var timeleft = 60;
-        var redirectUrl = '<?= $block->escapeUrl($block->getCartUrl()) ?>';
+        var redirectUrl = '<?= $escaper->escapeUrl($block->getCartUrl()) ?>';
         var countdownElement = $('#iyzipay-countdown');
 
         var downloadTimer = setInterval(function () {
