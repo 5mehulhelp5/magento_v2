@@ -11,7 +11,9 @@
         }
     ],
     "minimum-stability": "dev",
-    "require": {},
+    "require": {
+        "iyzico/iyzipay-php": "dev-master"
+    },
     "autoload": {
         "files": [
             "registration.php"

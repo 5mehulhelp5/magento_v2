@@ -2,6 +2,7 @@
 
 namespace Iyzico\Iyzipay\Controller\Order;
 
+use Exception;
 use Magento\Framework\App\Action\Action;
 use Magento\Framework\App\Action\Context;
 use Magento\Framework\View\Result\PageFactory;
@@ -33,7 +34,7 @@ class Index extends Action
             $resultPage->getLayout()->getBlock('iyzipay_order_result')->setData('order', $order);
         } catch (NoSuchEntityException $e) {
             $resultPage->getLayout()->getBlock('iyzipay_order_result')->setData('error_message', __('Order not found.'));
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             $resultPage->getLayout()->getBlock('iyzipay_order_result')->setData('error_message', __('An error occurred while processing your request.'));
         }
 

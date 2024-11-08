@@ -23,7 +23,6 @@
 namespace Iyzico\Iyzipay\Controller\Response;
 
 use Exception;
-use Throwable;
 use Iyzico\Iyzipay\Enums\ErrorCode;
 use Iyzico\Iyzipay\Helper\PkiStringBuilder;
 use Iyzico\Iyzipay\Helper\PkiStringBuilderFactory;
@@ -51,8 +50,10 @@ use Magento\Framework\View\Element\Template\Context as TemplateContext;
 use Magento\Quote\Api\CartManagementInterface;
 use Magento\Sales\Api\Data\OrderInterface;
 use Magento\Sales\Api\OrderRepositoryInterface;
-use Magento\Store\Model\StoreManagerInterface;
+use Magento\Sales\Model\Order\Payment\Transaction;
 use Magento\Store\Model\ScopeInterface;
+use Magento\Store\Model\StoreManagerInterface;
+use Throwable;
 
 class IyzipayResponse extends Action implements CsrfAwareActionInterface
 {
@@ -75,26 +76,26 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
     protected PkiStringBuilderFactory $pkiStringBuilderFactory;
     protected RequestHelperFactory $requestHelperFactory;
 
-    public function __construct
-    (
-        Context $context,
-        CheckoutSession $checkoutSession,
-        CustomerSession $customerSession,
-        CartManagementInterface $cartManagement,
+    public function __construct(
+        Context                  $context,
+        CheckoutSession          $checkoutSession,
+        CustomerSession          $customerSession,
+        CartManagementInterface  $cartManagement,
         OrderRepositoryInterface $orderRepository,
-        ResultFactory $resultFactory,
-        ScopeConfigInterface $scopeConfig,
-        IyziCardFactory $iyziCardFactory,
-        ManagerInterface $messageManager,
-        StoreManagerInterface $storeManager,
-        PriceHelper $priceHelper,
-        IyziErrorLogger $errorLogger,
-        ResponseObjectHelper $responseObjectHelper,
-        IyziOrderJobCollection $iyziOrderJobCollection,
-        WebhookHelperFactory $webhookHelperFactory,
-        PkiStringBuilderFactory $pkiStringBuilderFactory,
-        RequestHelperFactory $requestHelperFactory
-    ) {
+        ResultFactory            $resultFactory,
+        ScopeConfigInterface     $scopeConfig,
+        IyziCardFactory          $iyziCardFactory,
+        ManagerInterface         $messageManager,
+        StoreManagerInterface    $storeManager,
+        PriceHelper              $priceHelper,
+        IyziErrorLogger          $errorLogger,
+        ResponseObjectHelper     $responseObjectHelper,
+        IyziOrderJobCollection   $iyziOrderJobCollection,
+        WebhookHelperFactory     $webhookHelperFactory,
+        PkiStringBuilderFactory  $pkiStringBuilderFactory,
+        RequestHelperFactory     $requestHelperFactory
+    )
+    {
         parent::__construct($context);
         $this->checkoutSession = $checkoutSession;
         $this->customerSession = $customerSession;
@@ -113,7 +114,6 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
         $this->pkiStringBuilderFactory = $pkiStringBuilderFactory;
         $this->requestHelperFactory = $requestHelperFactory;
     }
-
 
     /**
      * Create Csrf Validation Exception
@@ -196,120 +196,15 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
     }
 
     /**
-     * Process Webhook Response
+     * Get Token
      *
-     * This function is responsible for processing the webhook response.
+     * This function is responsible for validating the token and returning the result.
      *
-     * @throws Exception
+     * @return string
      */
-    public function webhook(string $token, string $iyziEventType)
+    private function getToken()
     {
-        $orderId = $this->findParametersByToken($token, 'order_id');
-        $response = $this->getPaymentDetail($token);
-
-        $this->updateOrderFromWebhook($iyziEventType, $orderId, $response);
-
-        if (isset($response->errorCode)) {
-            $this->handleWebhookError($response);
-        }
-    }
-
-    /**
-     * Update Order Payment Status
-     *
-     * This function is responsible for updating the order payment status based on the response.
-     *
-     * @param string $orderId
-     * @param object $response
-     *
-     * @return void
-     * @throws Exception
-     */
-    private function updateOrderPaymentStatus(string $orderId, object $response): void
-    {
-        $order = $this->findOrderById($orderId);
-
-        $paymentStatus = $response->paymentStatus;
-        $status = $response->status;
-
-        if ($paymentStatus == 'PENDING_CREDIT' && $status == 'success') {
-            $order->setState("pending_payment")->setStatus("pending_payment");
-            $order->addStatusHistoryComment(__("PENDING_CREDIT"));
-            $this->setOrderJobStatus($orderId, "pending_payment");
-        }
-
-        if ($paymentStatus == 'INIT_BANK_TRANSFER' && $status == 'success') {
-            $order->setState("pending_payment")->setStatus("pending_payment");
-            $order->addStatusHistoryComment(__("INIT_BANK_TRANSFER"));
-            $this->setOrderJobStatus($orderId, "pending_payment");
-        }
-
-        if ($paymentStatus == 'SUCCESS' && $status == 'success') {
-            $order->setState("processing")->setStatus("processing");
-            $order->addStatusHistoryComment(__("SUCCESS"));
-            $this->setOrderJobStatus($orderId, "processing");
-        }
-
-        if ($response->installment > 1) {
-            $order = $this->setOrderInstallmentFee($order, $response->paidPrice, $response->installment);
-        }
-
-        $order->addStatusHistoryComment("Payment ID:" . $response->paymentId);
-        $order->addStatusHistoryComment("Conversation ID:" . $response->conversationId);
-
-        $order->save();
-    }
-
-    /**
-     * Update Order Job Payment Id
-     *
-     * This function is responsible for updating the order payment status based on the response.
-     *
-     * @param string $orderId
-     * @param object $response
-     *
-     * @return void
-     * @throws Exception
-     */
-    private function updateOrderJobPaymentId(string $orderId, object $response): void
-    {
-        $order = $this->findOrderById($orderId);
-        $paymentId = $response->paymentId;
-        $this->setOrderJobPaymentId($orderId, $paymentId);
-        $order->save();
-    }
-
-    /**
-     * Update Order Payment Status From Webhook
-     *
-     * This function is responsible for updating the order payment status from the webhook.
-     *
-     * @param string $iyziEventType
-     * @param string $orderId
-     * @param object $response
-     *
-     * @return void
-     * @throws Exception
-     */
-    private function updateOrderFromWebhook(string $iyziEventType, string $orderId, object $response): void
-    {
-        $order = $this->findOrderById($orderId);
-
-        $defaultState = $order->getState();
-        $defaultStatus = $order->getStatus();
-
-        $orderStatusDetails = $this->findOrderStatusDetails($iyziEventType, $response->status, $response->paymentStatus);
-
-        $order->setState($orderStatusDetails['state'] ?? $defaultState);
-        $order->setStatus($orderStatusDetails['status'] ?? $defaultStatus);
-        $order->addStatusHistoryComment($orderStatusDetails['comment'] ?? "The order status has been updated by the webhook.");
-
-        if ($response->installment > 1) {
-            $order = $this->setOrderInstallmentFee($order, $response->paidPrice, $response->installment);
-        }
-
-        $order->save();
-        $this->setOrderJobStatus($orderId, $orderStatusDetails['state'] ?? $defaultState);
+        return $this->getRequest()->getPostValue()['token'];
     }
 
     /**
@@ -341,157 +236,6 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
         } catch (NoSuchEntityException $e) {
             $this->errorLogger->critical("findOrderById: $orderId - Message: " . $e->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
             return null;
-        }
-    }
-
-    /**
-     * Find Order Status Details
-     *
-     * This function is responsible for finding the order status details.
-     *
-     * @param string $iyziEventType
-     * @param string $status
-     * @param string $paymentStatus
-     * @return array
-     */
-    private function findOrderStatusDetails(string $iyziEventType, string $status, string $paymentStatus): array
-    {
-        if ($iyziEventType === 'BANK_TRANSFER_AUTH' && $status === 'success') {
-            return [
-                'state' => 'processing',
-                'status' => 'processing',
-                'comment' => __("BANK_TRANSFER_AUTH_SUCCESS")
-            ];
-        }
-
-        if ($iyziEventType === 'CREDIT_PAYMENT_INIT' && $status === 'INIT_CREDIT') {
-            return [
-                'state' => 'pending_payment',
-                'status' => 'pending_payment',
-                'comment' => __("INIT_CREDIT")
-            ];
-        }
-
-        if ($iyziEventType === 'CREDIT_PAYMENT_PENDING' && $paymentStatus === 'PENDING_CREDIT') {
-            return [
-                'state' => 'pending_payment',
-                'status' => 'pending_payment',
-                'comment' => __("CREDIT_PAYMENT_PENDING")
-            ];
-        }
-
-        if ($iyziEventType === 'CREDIT_PAYMENT_AUTH' && $status === 'success') {
-            return [
-                'state' => 'processing',
-                'status' => 'processing',
-                'comment' => __("CREDIT_PAYMENT_AUTH_SUCCESS")
-            ];
-        }
-
-        if ($iyziEventType === 'CREDIT_PAYMENT_AUTH' && $status === 'FAILURE') {
-            return [
-                'state' => 'canceled',
-                'status' => 'canceled',
-                'comment' => __("CREDIT_PAYMENT_AUTH_FAILURE")
-            ];
-        }
-
-        return [];
-    }
-
-    /**
-     * Handle Installment Fee
-     *
-     * This function is responsible for handling the installment fee.
-     *
-     * @param $order
-     * @param $paidPrice
-     * @param $installment
-     * @return mixed
-     */
-    private function setOrderInstallmentFee($order, $paidPrice, $installment)
-    {
-        $grandTotal = $order->getGrandTotal();
-
-        $installmentPrice = $this->priceHelper->calculateInstallmentPrice($paidPrice, $grandTotal);
-
-        $order->setInstallmentFee($installmentPrice);
-        $order->setInstallmentCount($installment);
-
-        return $order;
-    }
-
-    /**
-     * Set Iyzipay Order Job
-     *
-     * This function is responsible for saving the iyzi order.
-     *
-     * @param object $response
-     * @param string $orderId
-     * @return void
-     */
-    private function setIyziOrder(object $response, string $orderId)
-    {
-        try {
-            // Load the order by order ID
-            $order = $this->orderRepository->get($orderId);
-
-            // Get the payment object from the order
-            $payment = $order->getPayment();
-
-            // Set the iyzico_payment_id and iyzico_conversation_id fields
-            $payment->setData('iyzico_payment_id', $response->paymentId);
-            $payment->setData('iyzico_conversation_id', $response->conversationId);
-
-            // Save the updated order payment data
-            $this->orderRepository->save($order);
-
-        } catch (Throwable $th) {
-            $this->errorLogger->critical("setIyziOrder: " . $th->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
-        }
-    }
-
-    /**
-     * Set Iyzipay Order Job
-     *
-     * This function is responsible for saving the iyzi order job.
-     *
-     * @param string $orderId
-     * @param string $status
-     * @return void
-     */
-    private function setOrderJobStatus(string $orderId, string $status)
-    {
-        $iyziOrderJob = $this->iyziOrderJobCollection->addFieldToFilter('order_id', $orderId)->getFirstItem();
-        $iyziOrderJob->setStatus($status);
-        try {
-            if ($status == 'processing' || $status == 'canceled') {
-                $iyziOrderJob->delete();
-            } else {
-                $iyziOrderJob->save();
-            }
-        } catch (Throwable $th) {
-            $this->errorLogger->critical("setIyziOrderJob: " . $th->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
-        }
-    }
-
-    /**
-     * Set Iyzipay Order Job
-     *
-     * This function is responsible for saving the iyzi order job.
-     *
-     * @param string $orderId
-     * @param string $status
-     * @return void
-     */
-    private function setOrderJobPaymentId(string $orderId, string $paymentId)
-    {
-        $iyziOrderJob = $this->iyziOrderJobCollection->addFieldToFilter('order_id', $orderId)->getFirstItem();
-        $iyziOrderJob->setIyzicoPaymentId($paymentId);
-        try {
-            $iyziOrderJob->save();
-        } catch (Throwable $th) {
-            $this->errorLogger->critical("setIyziOrderJob: " . $th->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
         }
     }
 
@@ -550,46 +294,6 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
     }
 
     /**
-     * Get User Id
-     *
-     * This function is responsible for checking if the user is logged in.
-     *
-     * @return int
-     */
-    private function getUserId(): int
-    {
-        if (!$this->customerSession->isLoggedIn()) {
-            return 0;
-        } else {
-            return $this->customerSession->getCustomerId();
-        }
-    }
-
-    /**
-     * Get Token
-     *
-     * This function is responsible for validating the token and returning the result.
-     *
-     * @return string
-     */
-    private function getToken()
-    {
-        return $this->getRequest()->getPostValue()['token'];
-    }
-
-    /**
-     * Get Webhook Helper
-     *
-     * This function is responsible for getting the webhook helper.
-     *
-     * @return WebhookHelper
-     */
-    private function getWebhookHelper(): WebhookHelper
-    {
-        return $this->webhookHelperFactory->create();
-    }
-
-    /**
      * Get Pki String Builder
      *
      * This function is responsible for getting the pki string builder.
@@ -614,62 +318,169 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
     }
 
     /**
-     * Get Iyzipay Module order_status from configuration : TODO
+     * Update Order Payment Status
      *
-     * This function is responsible for getting the order status from the configuration.
+     * This function is responsible for updating the order payment status based on the response.
      *
-     * @return string
+     * @param string $orderId
+     * @param object $response
+     *
+     * @return void
+     * @throws Exception
      */
-    private function getIyzipayOrderStatus(): string
+    private function updateOrderPaymentStatus(string $orderId, object $response): void
     {
-        $websiteId = $this->storeManager->getWebsite()->getId();
-        return $this->scopeConfig->getValue(
-            'payment/iyzipay/order_status',
-            ScopeInterface::SCOPE_WEBSITES,
-            $websiteId
-        );
+        $order = $this->findOrderById($orderId);
+        $payment = $order->getPayment();
+
+        $paymentStatus = $response->paymentStatus;
+        $status = $response->status;
+
+        // Set iyzico payment details in standard Magento payment fields
+        $payment->setLastTransId($response->paymentId);
+
+        // Store additional payment information
+        $paymentAdditionalInformation = [
+            'method_title' => 'Kredi/Banka Kartı ile Ödeme',
+            'iyzico_payment_id' => $response->paymentId,
+            'iyzico_conversation_id' => $response->conversationId,
+        ];
+
+        $payment->setAdditionalInformation($paymentAdditionalInformation);
+
+        // Set transaction information
+        $payment->setTransactionId($response->paymentId)
+            ->setIsTransactionClosed(0)
+            ->setTransactionAdditionalInfo(
+                Transaction::RAW_DETAILS,
+                json_encode($paymentAdditionalInformation)
+            );
+
+        if ($paymentStatus == 'PENDING_CREDIT' && $status == 'success') {
+            $order->setState("pending_payment")->setStatus("pending_payment");
+            $order->addCommentToStatusHistory(__("PENDING_CREDIT"));
+            $this->setOrderJobStatus($orderId, "pending_payment");
+        }
+
+        if ($paymentStatus == 'INIT_BANK_TRANSFER' && $status == 'success') {
+            $order->setState("pending_payment")->setStatus("pending_payment");
+            $order->addCommentToStatusHistory(__("INIT_BANK_TRANSFER"));
+            $this->setOrderJobStatus($orderId, "pending_payment");
+        }
+
+        if ($paymentStatus == 'SUCCESS' && $status == 'success') {
+            $order->setState("processing")->setStatus("processing");
+            $order->addCommentToStatusHistory(__("SUCCESS"));
+            $this->setOrderJobStatus($orderId, "processing");
+        }
+
+        if ($response->installment > 1) {
+            $order = $this->setOrderInstallmentFee($order, $response->paidPrice, $response->installment);
+        }
+
+        $order->addCommentToStatusHistory("Payment ID: " . $response->paymentId . " - Conversation ID:" . $response->conversationId);
+        $order->save();
     }
 
     /**
-     * Handle Webhook Response
+     * Set Iyzipay Order Job
      *
-     * This function is responsible for handling the webhook response.
+     * This function is responsible for saving the iyzi order job.
      *
-     * @param object $response
+     * @param string $orderId
+     * @param string $status
      * @return void
      */
-    private function handleWebhookError(object $response): void
+    private function setOrderJobStatus(string $orderId, string $status)
     {
-        $webhookHelper = $this->getWebhookHelper();
-        $status = $response->status;
-        $paymentStatus = $response->paymentStatus;
-
-        if ($status == 'failure' && $paymentStatus != 'SUCCESS') {
-            $errorCode = ErrorCode::from($response->errorCode);
-            $errorMessage = $errorCode->getErrorMessage();
-            $webhookHelper->webhookHttpResponse($response->errorCode . '-' . $errorMessage, 404);
-            $this->errorLogger->critical("handleWebhookError: " . $response->errorCode . '-' . $errorMessage, ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+        $iyziOrderJob = $this->iyziOrderJobCollection->addFieldToFilter('order_id', $orderId)->getFirstItem();
+        $iyziOrderJob->setStatus($status);
+        try {
+            if ($status == 'processing' || $status == 'canceled') {
+                $iyziOrderJob->delete();
+            } else {
+                $iyziOrderJob->save();
+            }
+        } catch (Throwable $th) {
+            $this->errorLogger->critical("setIyziOrderJob: " . $th->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
         }
     }
 
     /**
-     * Handle Error Response
+     * Handle Installment Fee
      *
-     * This function is responsible for handling the error response.
+     * This function is responsible for handling the installment fee.
      *
-     * @param object $response
-     * @param $resultRedirect
+     * @param $order
+     * @param $paidPrice
+     * @param $installment
      * @return mixed
      */
-    private function handleError(object $response, $resultRedirect): mixed
+    private function setOrderInstallmentFee($order, $paidPrice, $installment)
     {
-        $errorCode = ErrorCode::from($response->errorCode);
-        $errorMessage = $errorCode->getErrorMessage();
+        $grandTotal = $order->getGrandTotal();
 
-        $this->errorLogger->critical("handleError: " . $response->errorCode . '-' . $errorMessage, ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+        $installmentPrice = $this->priceHelper->calculateInstallmentPrice($paidPrice, $grandTotal);
 
-        $this->messageManager->addError($errorMessage);
-        return $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
+        $order->setInstallmentFee($installmentPrice);
+        $order->setInstallmentCount($installment);
+
+        return $order;
+    }
+
+    /**
+     * Update Order Job Payment Id
+     *
+     * This function is responsible for updating the order payment status based on the response.
+     *
+     * @param string $orderId
+     * @param object $response
+     *
+     * @return void
+     * @throws Exception
+     */
+    private function updateOrderJobPaymentId(string $orderId, object $response): void
+    {
+        $order = $this->findOrderById($orderId);
+        $paymentId = $response->paymentId;
+        $this->setOrderJobPaymentId($orderId, $paymentId);
+        $order->save();
+    }
+
+    /**
+     * Set Iyzipay Order Job
+     *
+     * This function is responsible for saving the iyzi order job.
+     *
+     * @param string $orderId
+     * @param string $status
+     * @return void
+     */
+    private function setOrderJobPaymentId(string $orderId, string $paymentId)
+    {
+        $iyziOrderJob = $this->iyziOrderJobCollection->addFieldToFilter('order_id', $orderId)->getFirstItem();
+        $iyziOrderJob->setIyzicoPaymentId($paymentId);
+        try {
+            $iyziOrderJob->save();
+        } catch (Throwable $th) {
+            $this->errorLogger->critical("setIyziOrderJob: " . $th->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+        }
+    }
+
+    /**
+     * Get User Id
+     *
+     * This function is responsible for checking if the user is logged in.
+     *
+     * @return int
+     */
+    private function getUserId(): int
+    {
+        if (!$this->customerSession->isLoggedIn()) {
+            return 0;
+        } else {
+            return $this->customerSession->getCustomerId();
+        }
     }
 
     /**
@@ -708,5 +519,235 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
         }
 
         return false;
+    }
+
+    /**
+     * Handle Error Response
+     *
+     * This function is responsible for handling the error response.
+     *
+     * @param object $response
+     * @param $resultRedirect
+     * @return mixed
+     */
+    private function handleError(object $response, $resultRedirect): mixed
+    {
+        $errorCode = ErrorCode::from($response->errorCode);
+        $errorMessage = $errorCode->getErrorMessage();
+
+        $this->errorLogger->critical("handleError: " . $response->errorCode . '-' . $errorMessage, ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+
+        $this->messageManager->addError($errorMessage);
+        return $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
+    }
+
+    /**
+     * Process Webhook Response
+     *
+     * This function is responsible for processing the webhook response.
+     *
+     * @throws Exception
+     */
+    public function webhook(string $token, string $iyziEventType)
+    {
+        $orderId = $this->findParametersByToken($token, 'order_id');
+        $response = $this->getPaymentDetail($token);
+
+        $this->updateOrderFromWebhook($iyziEventType, $orderId, $response);
+
+        if (isset($response->errorCode)) {
+            $this->handleWebhookError($response);
+        }
+    }
+
+    /**
+     * Update Order Payment Status From Webhook
+     *
+     * This function is responsible for updating the order payment status from the webhook.
+     *
+     * @param string $iyziEventType
+     * @param string $orderId
+     * @param object $response
+     *
+     * @return void
+     * @throws Exception
+     */
+    private function updateOrderFromWebhook(string $iyziEventType, string $orderId, object $response): void
+    {
+        $order = $this->findOrderById($orderId);
+        $payment = $order->getPayment();
+
+        $defaultState = $order->getState();
+        $defaultStatus = $order->getStatus();
+
+        // Update payment information if not already set
+        if (!$payment->getLastTransId()) {
+            $payment->setLastTransId($response->paymentId);
+
+            $paymentAdditionalInformation = [
+                'method_title' => 'Kredi/Banka Kartı ile Ödeme',
+                'iyzico_payment_id' => $response->paymentId,
+                'iyzico_conversation_id' => $response->conversationId,
+            ];
+
+            $payment->setAdditionalInformation($paymentAdditionalInformation);
+
+            $payment->setTransactionId($response->paymentId)
+                ->setIsTransactionClosed(0)
+                ->setTransactionAdditionalInfo(
+                    Transaction::RAW_DETAILS,
+                    json_encode($paymentAdditionalInformation)
+                );
+        }
+
+        $orderStatusDetails = $this->findOrderStatusDetails($iyziEventType, $response->status, $response->paymentStatus);
+
+        $order->setState($orderStatusDetails['state'] ?? $defaultState);
+        $order->setStatus($orderStatusDetails['status'] ?? $defaultStatus);
+        $order->addCommentToStatusHistory($orderStatusDetails['comment'] ?? "The order status has been updated by the webhook.");
+
+        if ($response->installment > 1) {
+            $order = $this->setOrderInstallmentFee($order, $response->paidPrice, $response->installment);
+        }
+
+        $payment->save();
+        $order->save();
+        $this->setOrderJobStatus($orderId, $orderStatusDetails['state'] ?? $defaultState);
+    }
+
+    /**
+     * Find Order Status Details
+     *
+     * This function is responsible for finding the order status details.
+     *
+     * @param string $iyziEventType
+     * @param string $status
+     * @param string $paymentStatus
+     * @return array
+     */
+    private function findOrderStatusDetails(string $iyziEventType, string $status, string $paymentStatus): array
+    {
+        if ($iyziEventType === 'BANK_TRANSFER_AUTH' && $status === 'success') {
+            return [
+                'state' => 'processing',
+                'status' => 'processing',
+                'comment' => __("BANK_TRANSFER_AUTH_SUCCESS")
+            ];
+        }
+
+        if ($iyziEventType === 'CREDIT_PAYMENT_INIT' && $status === 'INIT_CREDIT') {
+            return [
+                'state' => 'pending_payment',
+                'status' => 'pending_payment',
+                'comment' => __("INIT_CREDIT")
+            ];
+        }
+
+        if ($iyziEventType === 'CREDIT_PAYMENT_PENDING' && $paymentStatus === 'PENDING_CREDIT') {
+            return [
+                'state' => 'pending_payment',
+                'status' => 'pending_payment',
+                'comment' => __("CREDIT_PAYMENT_PENDING")
+            ];
+        }
+
+        if ($iyziEventType === 'CREDIT_PAYMENT_AUTH' && $status === 'success') {
+            return [
+                'state' => 'processing',
+                'status' => 'processing',
+                'comment' => __("CREDIT_PAYMENT_AUTH_SUCCESS")
+            ];
+        }
+
+        if ($iyziEventType === 'CREDIT_PAYMENT_AUTH' && $status === 'FAILURE') {
+            return [
+                'state' => 'canceled',
+                'status' => 'canceled',
+                'comment' => __("CREDIT_PAYMENT_AUTH_FAILURE")
+            ];
+        }
+
+        return [];
+    }
+
+    /**
+     * Handle Webhook Response
+     *
+     * This function is responsible for handling the webhook response.
+     *
+     * @param object $response
+     * @return void
+     */
+    private function handleWebhookError(object $response): void
+    {
+        $webhookHelper = $this->getWebhookHelper();
+        $status = $response->status;
+        $paymentStatus = $response->paymentStatus;
+
+        if ($status == 'failure' && $paymentStatus != 'SUCCESS') {
+            $errorCode = ErrorCode::from($response->errorCode);
+            $errorMessage = $errorCode->getErrorMessage();
+            $webhookHelper->webhookHttpResponse($response->errorCode . '-' . $errorMessage, 404);
+            $this->errorLogger->critical("handleWebhookError: " . $response->errorCode . '-' . $errorMessage, ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+        }
+    }
+
+    /**
+     * Get Webhook Helper
+     *
+     * This function is responsible for getting the webhook helper.
+     *
+     * @return WebhookHelper
+     */
+    private function getWebhookHelper(): WebhookHelper
+    {
+        return $this->webhookHelperFactory->create();
+    }
+
+    /**
+     * Set Iyzipay Order Job
+     *
+     * This function is responsible for saving the iyzi order.
+     *
+     * @param object $response
+     * @param string $orderId
+     * @return void
+     */
+    private function setIyziOrder(object $response, string $orderId)
+    {
+        try {
+            // Load the order by order ID
+            $order = $this->orderRepository->get($orderId);
+
+            // Get the payment object from the order
+            $payment = $order->getPayment();
+
+            // Set the iyzico_payment_id and iyzico_conversation_id fields
+            $payment->setData('iyzico_payment_id', $response->paymentId);
+            $payment->setData('iyzico_conversation_id', $response->conversationId);
+
+            // Save the updated order payment data
+            $this->orderRepository->save($order);
+
+        } catch (Throwable $th) {
+            $this->errorLogger->critical("setIyziOrder: " . $th->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+        }
+    }
+
+    /**
+     * Get Iyzipay Module order_status from configuration : TODO
+     *
+     * This function is responsible for getting the order status from the configuration.
+     *
+     * @return string
+     */
+    private function getIyzipayOrderStatus(): string
+    {
+        $websiteId = $this->storeManager->getWebsite()->getId();
+        return $this->scopeConfig->getValue(
+            'payment/iyzipay/order_status',
+            ScopeInterface::SCOPE_WEBSITES,
+            $websiteId
+        );
     }
 }
