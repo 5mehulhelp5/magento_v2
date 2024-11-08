@@ -1,62 +1,92 @@
-define(
-    [
-        'Magento_Checkout/js/view/payment/default',
-        'jquery',
-        'ko',
-        'Magento_Checkout/js/model/payment/additional-validators',
-        'mage/url',
-        'Magento_Checkout/js/model/full-screen-loader',
-        'Magento_Checkout/js/model/quote',
-        'Magento_Customer/js/model/customer',
-        'mage/storage',
-        'Magento_Checkout/js/model/place-order',
-        'Magento_Checkout/js/model/url-builder',
-        'uiComponent'
-    ],
-    function (Component, $, ko, additionalValidators, urlBuilder, fullscreenLoader, quote, customer, storage, placeOrderService, mageUrlBuilder) {
-        'use strict';
-        return Component.extend({
-            defaults: {
-                template: 'Iyzico_Iyzipay/payment/iyzipay'
-            },
-            getInstructions: function () {
-                return window.checkoutConfig.payment.instructions[this.item.method];
-            },
-            payWithIyzico: function () {
-                var quoteEmail, guestQuoteId = false;
+define([
+    'Magento_Checkout/js/view/payment/default',
+    'jquery',
+    'ko',
+    'Magento_Checkout/js/model/payment/additional-validators',
+    'mage/url',
+    'Magento_Checkout/js/model/full-screen-loader',
+    'Magento_Checkout/js/model/quote',
+    'Magento_Customer/js/model/customer',
+    'mage/storage',
+    'Magento_Checkout/js/model/place-order',
+    'Magento_Checkout/js/model/url-builder',
+    'uiComponent',
+    'Magento_Ui/js/model/messageList' // Mesaj gösterimi için eklendi
+], function (
+    Component,
+    $,
+    ko,
+    additionalValidators,
+    urlBuilder,
+    fullscreenLoader,
+    quote,
+    customer,
+    storage,
+    placeOrderService,
+    mageUrlBuilder,
+    uiComponent,
+    messageList
+) {
+    'use strict';
 
-                if (!additionalValidators.validate()) {   //Resolve checkout aggreement accept error
-                    return false;
-                }
+    return Component.extend({
+        defaults: {
+            template: 'Iyzico_Iyzipay/payment/iyzipay',
+            errorMessage: ko.observable(''),
+            isPlaceOrderActionAllowed: ko.observable(true)
+        },
 
-                $(document).ready(function () {
+        getInstructions: function () {
+            return window.checkoutConfig.payment.instructions[this.item.method];
+        },
 
-                    $("#loadingBar").show();
+        showError: function (message) {
+            messageList.addErrorMessage({
+                message: message,
+                sticky: true
+            });
+            $("#loadingBar").hide();
+        },
 
-                    if (!customer.isLoggedIn()) {
-                        quoteEmail = quote.guestEmail;
-                        guestQuoteId = quote.getQuoteId();
-                    }
+        payWithIyzico: function () {
+            var self = this;
+            var quoteEmail, guestQuoteId = false;
 
-                    $.ajax({
-                        url: urlBuilder.build("Iyzico_Iyzipay/request/iyzipayrequest"),
-                        data: { iyziQuoteEmail: quoteEmail, iyziQuoteId: guestQuoteId },
-                        type: "post",
-                        dataType: "json",
-                        success: function (response) {
-                            if (response.success) {
-                                window.location.href = response.url;
-                            } else {
-                                window.location.href = urlBuilder.build(response.redirect + '?code=' + response.code + '&message=' + encodeURIComponent(response.message));
-                            }
-                        },
-                        error: function () {
-                            alert('An error occurred. Please try again.');
-                        }
-                    });
-
-                });
+            if (!additionalValidators.validate()) {
+                return false;
             }
-        });
-    }
-);
+
+            self.isPlaceOrderActionAllowed(false);
+            $("#loadingBar").show();
+
+            if (!customer.isLoggedIn()) {
+                quoteEmail = quote.guestEmail;
+                guestQuoteId = quote.getQuoteId();
+            }
+
+            $.ajax({
+                url: urlBuilder.build("Iyzico_Iyzipay/request/iyzipayrequest"),
+                data: {
+                    iyziQuoteEmail: quoteEmail,
+                    iyziQuoteId: guestQuoteId
+                },
+                type: "post",
+                dataType: "json",
+                success: function (response) {
+                    console.log("response: ", response);
+                    if (response.success) {
+                        window.location.href = response.url;
+                    } else {
+                        self.showError(response.message || 'Unknown error occurred. Please try again later.');
+                        self.isPlaceOrderActionAllowed(true);
+                    }
+                },
+                error: function (xhr, status, error) {
+                    self.showError('Unknown error occurred. Please try again later.');
+                    $("#loadingBar").hide();
+                    self.isPlaceOrderActionAllowed(true);
+                }
+            });
+        }
+    });
+});
