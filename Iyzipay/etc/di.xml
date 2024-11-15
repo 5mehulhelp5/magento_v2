@@ -16,10 +16,8 @@
     <!-- IyzipayInvoiceTotal -->
     <preference for="Magento\Sales\Block\Adminhtml\Invoice\Totals"
                 type="Iyzico\Iyzipay\Block\Adminhtml\Invoice\IyzipayInvoiceTotal"/>
-    <!-- IyzipayOrderTotalsTemplate -->
+    <!-- IyzipayOrderTotals -->
     <preference for="Magento\Sales\Block\Order\Totals" type="Iyzico\Iyzipay\Block\Order\IyzipayOrderTotals"/>
-    <!-- IyzipayOrderInvoiceTotalsTemplate -->
-    <preference for="Iyzico\Iyzipay\Api\WebhookInterface" type="Iyzico\Iyzipay\Model\Api\Webhook"/>
     <!-- Helper Injections -->
     <type name="Iyzico\Iyzipay\Helper\ObjectHelper">
         <arguments>
@@ -37,4 +35,6 @@
             <argument name="handler" xsi:type="object">Iyzico\Iyzipay\Logger\Handler\IyziErrorHandler</argument>
         </arguments>
     </type>
+    <preference for="Iyzico\Iyzipay\Api\Data\WebhookDataInterface" type="Iyzico\Iyzipay\Model\Data\WebhookData"/>
+    <preference for="Iyzico\Iyzipay\Api\WebhookInterface" type="Iyzico\Iyzipay\Model\Webhook"/>
 </config>

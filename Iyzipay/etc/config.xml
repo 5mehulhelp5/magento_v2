@@ -1,18 +1,19 @@
 <?xml version="1.0" ?>
-<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
-	<default>
-		<payment>
-			<iyzipay>
-				<active>1</active>
-				<model>Iyzico\Iyzipay\Model\Payment\Iyzipay</model>
-				<order_status>pending</order_status>
-				<title>Kredi/Banka Kartı ile Ödeme</title>
-				<allowspecific>0</allowspecific>
-				<group>offline</group>
-				<checkout_language>TR</checkout_language>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
+    <default>
+        <payment>
+            <iyzipay>
+                <active>1</active>
+                <model>Iyzico\Iyzipay\Model\Payment\Iyzipay</model>
+                <order_status>pending</order_status>
+                <title>Kredi/Banka Kartı ile Ödeme</title>
+                <allowspecific>0</allowspecific>
+                <group>offline</group>
+                <checkout_language>TR</checkout_language>
                 <common_cron_settings>0 0 * * *</common_cron_settings>
                 <effective_cron_schedule>0 0 * * *</effective_cron_schedule>
-			</iyzipay>
-		</payment>
-	</default>
+            </iyzipay>
+        </payment>
+    </default>
 </config>
