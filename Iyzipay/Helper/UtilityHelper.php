@@ -2,6 +2,8 @@
 
 namespace Iyzico\Iyzipay\Helper;
 
+use Iyzico\Iyzipay\Model\IyziCardFactory;
+use Magento\Customer\Model\Session as CustomerSession;
 use Magento\Quote\Model\Quote\Item;
 
 class UtilityHelper
@@ -21,32 +23,15 @@ class UtilityHelper
     }
 
     /**
-     * Calculate Subtotal Price
-     *
-     * @param  Item|array  $order
-     * @return string
-     */
-    public function calculateSubTotalPrice(Item|array $order): string
-    {
-        $price = 0;
-        foreach ($order->getAllVisibleItems() as $item) {
-            $price += round($item->getPrice(), 2);
-        }
-
-        $price += $order->getShippingAddress()->getShippingAmount() ?? 0;
-        return $this->parsePrice($price);
-    }
-
-    /**
      * Trailing Zero
      *
      * @param  float  $price
      * @return string
      */
-    public function trailingZero(float $price): string
+    public function parsePrice(float $price): string
     {
         if (strpos($price, ".") === false) {
-            return $price.".0";
+            return $price . ".0";
         }
 
         $subStrIndex = 0;
@@ -56,7 +41,7 @@ class UtilityHelper
                 $subStrIndex = $i + 1;
             } else {
                 if (strcmp($priceReversed[$i], ".") == 0) {
-                    $priceReversed = "0".$priceReversed;
+                    $priceReversed = "0" . $priceReversed;
                     break;
                 } else {
                     break;
@@ -65,6 +50,23 @@ class UtilityHelper
         }
 
         return strrev(substr($priceReversed, $subStrIndex));
+    }
+
+    /**
+     * Calculate Subtotal Price
+     *
+     * @param  $order
+     * @return string
+     */
+    public function calculateSubTotalPrice($order): string
+    {
+        $price = 0;
+        foreach ($order->getAllVisibleItems() as $item) {
+            $price += round($item->getPrice(), 2);
+        }
+
+        $price += $order->getShippingAddress()->getShippingAmount() ?? 0;
+        return $this->parsePrice($price);
     }
 
     /**
@@ -159,6 +161,10 @@ class UtilityHelper
      */
     public function validateString(mixed $string): string
     {
+        if (is_array($string)) {
+            return implode(' ', $string);
+        }
+
         if (!empty(trim($string))) {
             return $string;
         }
@@ -174,7 +180,53 @@ class UtilityHelper
      */
     public function generateConversationId(int $quoteId): string
     {
-        return 'QI'.$quoteId.'T'.time();
+        return 'QI' . $quoteId . 'T' . time();
+    }
+
+    public function generateRandomString(): string
+    {
+        return uniqid();
+    }
+
+    /**
+     * Get Customer Id
+     *
+     * @param  CustomerSession $customerSession
+     * @return int|null
+     */
+    public function getCustomerId(CustomerSession $customerSession): ?int
+    {
+        return $customerSession->isLoggedIn() ? $customerSession->getCustomerId() : 0;
+    }
+
+    /**
+     * Get Customer Card User Key
+     *
+     * This function is responsible for getting the customer card user key.
+     *
+     * @param  int  $customerId
+     * @param  string  $apiKey
+     * @return string
+     */
+    public function getCustomerCardUserKey(IyziCardFactory $iyziCardFactory, int $customerId, string $apiKey): string
+    {
+        if ($customerId) {
+            $iyziCardFind = $iyziCardFactory->create()->getCollection()
+                ->addFieldToFilter('customer_id', $customerId)
+                ->addFieldToFilter('api_key', $apiKey)
+                ->addFieldToSelect('card_user_key');
+            $iyziCardFind = $iyziCardFind->getData();
+            return !empty($iyziCardFind[0]['card_user_key']) ? $iyziCardFind[0]['card_user_key'] : '';
+        }
+        return '';
+    }
+
+    public function calculateHmacSHA256Signature($params, $secretKey): string
+    {
+        $dataToSign = implode(':', $params);
+        $mac = hash_hmac('sha256', $dataToSign, $secretKey, true);
+
+        return bin2hex($mac);
     }
 
 }

@@ -3,7 +3,9 @@
 namespace Iyzico\Iyzipay\Helper;
 
 use Magento\Framework\App\Config\ScopeConfigInterface;
+use Magento\Framework\App\ObjectManager;
 use Magento\Framework\Exception\LocalizedException;
+use Magento\Framework\Exception\NoSuchEntityException;
 use Magento\Store\Model\ScopeInterface;
 use Magento\Store\Model\StoreManagerInterface;
 
@@ -52,6 +54,76 @@ class ConfigHelper
     }
 
     /**
+     * Get Api Key
+     *
+     * @return mixed
+     * @throws LocalizedException
+     */
+    public function getApiKey(): mixed
+    {
+        return $this->scopeConfig->getValue(
+            'payment/iyzipay/api_key',
+            $this->getScopeInterface(),
+            $this->getWebsiteId()
+        );
+    }
+
+    /**
+     * Get Api Key
+     *
+     * @return mixed
+     * @throws LocalizedException
+     */
+    public function getLocale(): mixed
+    {
+        return $this->scopeConfig->getValue(
+            'general/locale/code',
+            $this->getScopeInterface(),
+            $this->getWebsiteId()
+        );
+    }
+
+    /**
+     * Get Currency
+     *
+     * This function is responsible for getting the currency.
+     *
+     * @throws NoSuchEntityException
+     * @throws LocalizedException
+     */
+    public function getCurrency(): string
+    {
+        return $this->storeManager->getStore()->getCurrentCurrency()->getCode();
+    }
+
+    /**
+     * Get Callback Url
+     *
+     * This function is responsible for getting the callback url.
+     *
+     * @throws NoSuchEntityException
+     */
+    public function getCallbackUrl(): string
+    {
+        return $this->storeManager->getStore()->getBaseUrl();
+    }
+
+    /**
+     * Get Base URL
+     *
+     * @return string
+     * @throws LocalizedException
+     */
+    public function getBaseUrl(): string
+    {
+        return $this->scopeConfig->getValue(
+            'payment/iyzipay/sandbox',
+            $this->getScopeInterface(),
+            $this->getWebsiteId()
+        ) ? 'https://sandbox-api.iyzipay.com' : 'https://api.iyzipay.com';
+    }
+
+    /**
      * Get Webhook Url Key
      *
      * @return mixed
@@ -65,4 +137,17 @@ class ConfigHelper
             $this->getWebsiteId()
         );
     }
+
+    /**
+     * Get Magento Version
+     *
+     * This function is responsible for getting the magento version.
+     */
+    public function getMagentoVersion()
+    {
+        $objectManager = ObjectManager::getInstance();
+        $productMetaData = $objectManager->get('Magento\Framework\App\ProductMetadataInterface');
+        return $productMetaData->getVersion();
+    }
+
 }

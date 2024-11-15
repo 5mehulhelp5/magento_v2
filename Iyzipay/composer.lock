@@ -4,11 +4,11 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "641ff68967f6ec17d61e730e941e30ad",
+    "content-hash": "e7d1a9b45d8480b81c1e1d661ff5cdad",
     "packages": [
         {
             "name": "iyzico/iyzipay-php",
-            "version": "dev-master",
+            "version": "v2.0.57",
             "source": {
                 "type": "git",
                 "url": "https://github.com/iyzico/iyzipay-php.git",
@@ -28,7 +28,6 @@
                 "phpunit/phpunit": "~9.6",
                 "satooshi/php-coveralls": "~0.6.1"
             },
-            "default-branch": true,
             "type": "library",
             "autoload": {
                 "psr-4": {
@@ -66,10 +65,8 @@
     ],
     "packages-dev": [],
     "aliases": [],
-    "minimum-stability": "dev",
-    "stability-flags": {
-        "iyzico/iyzipay-php": 20
-    },
+    "minimum-stability": "stable",
+    "stability-flags": [],
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": [],

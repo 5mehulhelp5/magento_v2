@@ -4,16 +4,6 @@
     "type": "magento2-module",
     "version": "2.1.1",
     "license": "GPL-3.0",
-    "authors": [
-        {
-            "name": "iyzico",
-            "email": "info@iyzico.com"
-        }
-    ],
-    "minimum-stability": "dev",
-    "require": {
-        "iyzico/iyzipay-php": "dev-master"
-    },
     "autoload": {
         "files": [
             "registration.php"

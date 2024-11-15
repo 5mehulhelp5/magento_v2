@@ -50,15 +50,4 @@ class StringHelper
 
         return "NOT PROVIDED";
     }
-
-    /**
-     * Generate Conversation Id
-     *
-     * @param mixed $quoteId
-     * @return string
-     */
-    public function generateConversationId(mixed $quoteId): string
-    {
-        return 'QI' . $quoteId . 'T' . time();
-    }
 }
