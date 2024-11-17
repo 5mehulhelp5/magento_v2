@@ -22,15 +22,14 @@
 
 namespace Iyzico\Iyzipay\Controller\Request;
 
-use Exception;
 use Iyzico\Iyzipay\Helper\ConfigHelper;
 use Iyzico\Iyzipay\Helper\ObjectHelper;
 use Iyzico\Iyzipay\Helper\UtilityHelper;
 use Iyzico\Iyzipay\Library\Model\CheckoutFormInitialize;
 use Iyzico\Iyzipay\Library\Options;
 use Iyzico\Iyzipay\Library\Request\CreateCheckoutFormInitializeRequest;
-use Iyzico\Iyzipay\Logger\IyziErrorLogger;
 use Iyzico\Iyzipay\Model\IyziCardFactory;
+use Iyzico\Iyzipay\Service\OrderJobService;
 use Magento\Checkout\Model\Session as CheckoutSession;
 use Magento\Customer\Model\Session as CustomerSession;
 use Magento\Framework\App\ActionInterface;
@@ -39,43 +38,22 @@ use Magento\Framework\Controller\Result\JsonFactory;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\Exception\NoSuchEntityException;
 use Magento\Quote\Model\Quote;
-use Magento\Framework\ObjectManagerInterface;
 
 
 class IyzipayRequest implements ActionInterface
 {
-
-    protected CheckoutSession $checkoutSession;
-    protected CustomerSession $customerSession;
-    protected IyziCardFactory $iyziCardFactory;
-    protected JsonFactory $resultJsonFactory;
-    protected Quote $quote;
-    protected IyziErrorLogger $errorLogger;
-    protected ConfigHelper $configHelper;
-    protected UtilityHelper $utilityHelper;
-    private ObjectManagerInterface $objectManager;
-
     public function __construct
     (
-        CheckoutSession $checkoutSession,
-        CustomerSession $customerSession,
-        IyziCardFactory $iyziCardFactory,
-        JsonFactory $resultJsonFactory,
-        Quote $quote,
-        IyziErrorLogger $errorLogger,
-        ConfigHelper $configHelper,
-        UtilityHelper $utilityHelper,
-        ObjectManagerInterface $objectManager
+        protected readonly CheckoutSession $checkoutSession,
+        protected readonly CustomerSession $customerSession,
+        protected readonly IyziCardFactory $iyziCardFactory,
+        protected readonly JsonFactory $resultJsonFactory,
+        protected readonly Quote $quote,
+        protected readonly ConfigHelper $configHelper,
+        protected readonly UtilityHelper $utilityHelper,
+        protected readonly ObjectHelper $objectHelper,
+        protected readonly OrderJobService $orderJobService
     ) {
-        $this->checkoutSession = $checkoutSession;
-        $this->customerSession = $customerSession;
-        $this->iyziCardFactory = $iyziCardFactory;
-        $this->resultJsonFactory = $resultJsonFactory;
-        $this->quote = $quote;
-        $this->errorLogger = $errorLogger;
-        $this->configHelper = $configHelper;
-        $this->utilityHelper = $utilityHelper;
-        $this->objectManager = $objectManager;
     }
 
     /**
@@ -88,26 +66,39 @@ class IyzipayRequest implements ActionInterface
      */
     public function execute(): Json
     {
-        $objectHelper = $this->getObjectHelper();
+        // Get the configuration values
         $apiKey = $this->configHelper->getApiKey();
         $secretKey = $this->configHelper->getSecretKey();
-        $customerId = $this->utilityHelper->getCustomerId($this->customerSession);
+        $baseUrl = $this->configHelper->getBaseUrl();
+        $callbackUrl = $this->configHelper->getCallbackUrl();
+        $paymentSource = $this->configHelper->getPaymentSource();
         $locale = $this->configHelper->getLocale();
+        $currency = $this->configHelper->getCurrency();
+
+        // Ensure the cookies are same site
+        $this->utilityHelper->ensureCookiesSameSite();
+        $resultJson = $this->resultJsonFactory->create();
+        $checkoutSession = $this->checkoutSession->getQuote();
+
+        // Configure the buyer
+        $customerId = $this->utilityHelper->getCustomerId($this->customerSession);
+        $cardUserKey = $this->utilityHelper->getCustomerCardUserKey($this->iyziCardFactory, $customerId, $apiKey);
+        $buyer = $this->objectHelper->createBuyer($checkoutSession);
+
+        // Configure the basket
         $basketId = $this->checkoutSession->getQuoteId();
         $conversationId = $this->utilityHelper->generateConversationId($basketId);
-        $checkoutSession = $this->checkoutSession->getQuote();
-        $basketItems = $objectHelper->createBasketItems($checkoutSession);
-        $currency = $this->configHelper->getCurrency();
-        $buyer = $objectHelper->createBuyer($checkoutSession, $this->customerSession->getEmail());
-        $callbackUrl = $this->configHelper->getCallbackUrl() . "Iyzico_Iyzipay/response/iyzipayresponse";
+        $basketItems = $this->objectHelper->createBasketItems($checkoutSession);
+
+        // Configure the price
         $price = $this->utilityHelper->calculateSubtotalPrice($checkoutSession);
         $paidPrice = $this->utilityHelper->parsePrice(round($checkoutSession->getGrandTotal(), 2));
-        $paymentSource = "MAGENTO2|" . $this->configHelper->getMagentoVersion() . "|SPACE-2.1.1";
-        $cardUserKey = $this->utilityHelper->getCustomerCardUserKey($this->iyziCardFactory, $customerId, $apiKey);
-        $shippingAddress = $objectHelper->createShippingAddress($checkoutSession);
-        $billingAddress = $objectHelper->createBillingAddress($checkoutSession);
-        $baseUrl = $this->configHelper->getBaseUrl();
 
+        // Configure the address
+        $shippingAddress = $this->objectHelper->createShippingAddress($checkoutSession);
+        $billingAddress = $this->objectHelper->createBillingAddress($checkoutSession);
+
+        // Create the request
         $request = new CreateCheckoutFormInitializeRequest();
         $request->setLocale($locale);
         $request->setConversationId($conversationId);
@@ -124,6 +115,7 @@ class IyzipayRequest implements ActionInterface
         $request->setBasketItems($basketItems);
         $request->setCardUserKey($cardUserKey);
 
+        // Create the options
         $options = new Options();
         $options->setBaseUrl($baseUrl);
         $options->setApiKey($apiKey);
@@ -141,96 +133,18 @@ class IyzipayRequest implements ActionInterface
         ], $secretKey);
 
         if ($responseSignature === $calculateSignature) {
-            return $this->createJsonResult($this->processSuccessfulResponse($response, $basketId));
+            $this->utilityHelper->storeSessionData($checkoutSession, $this->customerSession);
+            $this->orderJobService->saveIyziOrderJobTable($response, $basketId, null);
+            return $resultJson->setData([
+                'success' => true,
+                'url' => $response->getPaymentPageUrl()
+            ]);
         }
 
-        return $this->createJsonResult([
+        return $resultJson->setData([
             'success' => false,
             'message' => "Signature Mismatch",
             'code' => "0"
         ]);
-    }
-
-    /**
-     * Get Object Helper
-     *
-     * This function is responsible for getting the object helper.
-     *
-     * @return ObjectHelper
-     */
-    private function getObjectHelper(): ObjectHelper
-    {
-        return new ObjectHelper($this->utilityHelper);
-    }
-
-    /**
-     * Create Json Result
-     *
-     * This function is responsible for creating the json result.
-     *
-     * @param $result
-     * @return Json
-     */
-    private function createJsonResult($result): Json
-    {
-        $resultJson = $this->resultJsonFactory->create();
-        return $resultJson->setData($result);
-    }
-
-    /**
-     * Process Successful Response
-     *
-     * This function is responsible for processing the successful response.
-     *
-     * @param  CheckoutFormInitialize  $requestResponse
-     * @param $basketId
-     * @return array
-     */
-    private function processSuccessfulResponse(CheckoutFormInitialize $requestResponse, $basketId): array
-    {
-        $this->saveIyziOrderJobTable($requestResponse, $basketId);
-        return ['success' => true, 'url' => $requestResponse->getPaymentPageUrl()];
-    }
-
-    /**
-     * Save Iyzi Order Table
-     *
-     * This function is responsible for saving the iyzi order table.
-     *
-     * @param  CheckoutFormInitialize  $requestResponse
-     * @param $quoteId
-     */
-    private function saveIyziOrderJobTable(CheckoutFormInitialize $requestResponse, $quoteId): void
-    {
-        $iyzicoOrderJob = $this->objectManager->create('Iyzico\Iyzipay\Model\IyziOrderJob');
-
-        $iyzicoOrderJob->setData([
-            'order_id' => null,
-            'quote_id' => $quoteId,
-            'iyzico_payment_token' => $requestResponse->getToken(),
-            'iyzico_conversation_id' => $requestResponse->getConversationId(),
-            'status' => $requestResponse->getStatus(),
-        ]);
-
-        try {
-            $iyzicoOrderJob->save();
-        } catch (Exception $e) {
-            $this->errorLogger->critical($e->getMessage());
-        }
-    }
-
-    /**
-     * Store Session Data
-     *
-     * This function is responsible for storing the session data.
-     *
-     * @param $customerMail
-     * @param $customerBasketId
-     * @return void
-     */
-    private function storeSessionData($customerMail, $customerBasketId): void
-    {
-        $this->customerSession->setEmail($customerMail);
-        $this->checkoutSession->setGuestQuoteId($customerBasketId);
     }
 }

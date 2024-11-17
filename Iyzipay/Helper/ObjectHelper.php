@@ -10,7 +10,7 @@ use Iyzico\Iyzipay\Library\Model\Buyer;
 class ObjectHelper
 {
     public function __construct(
-        protected UtilityHelper $utilityHelper
+        private readonly UtilityHelper $utilityHelper
     ) {
     }
 
@@ -50,7 +50,7 @@ class ObjectHelper
         return $basketItems;
     }
 
-    public function createBuyer($checkoutSession, $guestEmail): Buyer
+    public function createBuyer($checkoutSession): Buyer
     {
         $billingAddress = $checkoutSession->getBillingAddress();
 
@@ -62,7 +62,7 @@ class ObjectHelper
         $city = is_null($billingAddress->getCity()) ? "UNKNOWN" : $billingAddress->getCity();
         $country = is_null($billingAddress->getCountry()) ? "UNKNOWN" : $billingAddress->getCountry();
         $zipCode = is_null($billingAddress->getPostCode()) ? "UNKNOWN" : $billingAddress->getPostCode();
-        $email = is_null($billingAddress->getEmail()) ? $guestEmail : $billingAddress->getEmail();
+        $email = is_null($billingAddress->getEmail()) ? "UNKNOWN" : $billingAddress->getEmail();
 
         $buyer = new Buyer();
         $buyer->setId(md5($email));

@@ -12,8 +12,8 @@ use Magento\Store\Model\StoreManagerInterface;
 class ConfigHelper
 {
     public function __construct(
-        protected StoreManagerInterface $storeManager,
-        protected ScopeConfigInterface $scopeConfig
+        private readonly StoreManagerInterface $storeManager,
+        private readonly ScopeConfigInterface $scopeConfig
     ) {
     }
 
@@ -105,7 +105,7 @@ class ConfigHelper
      */
     public function getCallbackUrl(): string
     {
-        return $this->storeManager->getStore()->getBaseUrl();
+        return $this->storeManager->getStore()->getBaseUrl() . "Iyzico_Iyzipay/response/iyzipayresponse";
     }
 
     /**
@@ -136,6 +136,33 @@ class ConfigHelper
             $this->getScopeInterface(),
             $this->getWebsiteId()
         );
+    }
+
+    /**
+     * Get Iyzipay Module order_status from configuration : TODO
+     *
+     * This function is responsible for getting the order status from the configuration.
+     *
+     * @return string
+     * @throws LocalizedException
+     */
+    public function getIyzipayOrderStatus(): string
+    {
+        return $this->scopeConfig->getValue(
+            'payment/iyzipay/order_status',
+            $this->getScopeInterface(),
+            $this->getWebsiteId()
+        );
+    }
+
+    /**
+     * Get Iyzipay Magento Payment Source
+     *
+     * This function is responsible for getting the payment source.
+     */
+    public function getPaymentSource(): string
+    {
+        return "MAGENTO2|" . $this->getMagentoVersion() . "|SPACE-2.1.1";
     }
 
     /**

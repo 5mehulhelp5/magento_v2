@@ -26,11 +26,6 @@ class IyzipayResourceMapper
         return $this;
     }
 
-    public function mapResource(IyzipayResource $resource)
-    {
-        return $this->mapResourceFrom($resource, $this->jsonObject);
-    }
-
     public function mapResourceFrom(IyzipayResource $resource, $jsonObject)
     {
         if (isset($jsonObject->status)) {
@@ -58,5 +53,10 @@ class IyzipayResourceMapper
             $resource->setRawResult($this->rawResult);
         }
         return $resource;
+    }
+
+    public function mapResource(IyzipayResource $resource)
+    {
+        return $this->mapResourceFrom($resource, $this->jsonObject);
     }
 }

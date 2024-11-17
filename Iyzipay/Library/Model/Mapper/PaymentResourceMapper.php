@@ -2,13 +2,13 @@
 
 namespace Iyzico\Iyzipay\Library\Model\Mapper;
 
-use Iyzico\Iyzipay\Library\PaymentResource;
+use Iyzico\Iyzipay\Library\Model\PaymentResource;
 
 class PaymentResourceMapper extends IyzipayResourceMapper
 {
-    public function mapPaymentResource(PaymentResource $paymentResource)
+    public static function create($rawResult = null)
     {
-        return $this->mapPaymentResourceFrom($paymentResource, $this->jsonObject);
+        return new PaymentResourceMapper($rawResult);
     }
 
     public function mapPaymentResourceFrom(PaymentResource $paymentResource, $jsonObject)
@@ -93,8 +93,8 @@ class PaymentResourceMapper extends IyzipayResourceMapper
         return $paymentResource;
     }
 
-    public static function create($rawResult = null)
+    public function mapPaymentResource(PaymentResource $paymentResource)
     {
-        return new PaymentResourceMapper($rawResult);
+        return $this->mapPaymentResourceFrom($paymentResource, $this->jsonObject);
     }
 }

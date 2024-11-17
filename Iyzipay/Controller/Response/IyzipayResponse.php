@@ -23,96 +23,49 @@
 namespace Iyzico\Iyzipay\Controller\Response;
 
 use Exception;
-use Iyzico\Iyzipay\Enums\ErrorCode;
-use Iyzico\Iyzipay\Helper\PkiStringBuilder;
-use Iyzico\Iyzipay\Helper\PkiStringBuilderFactory;
-use Iyzico\Iyzipay\Helper\PriceHelper;
-use Iyzico\Iyzipay\Helper\RequestHelper;
-use Iyzico\Iyzipay\Helper\RequestHelperFactory;
-use Iyzico\Iyzipay\Helper\ResponseObjectHelper;
-use Iyzico\Iyzipay\Helper\WebhookHelper;
-use Iyzico\Iyzipay\Helper\WebhookHelperFactory;
+use Iyzico\Iyzipay\Helper\ConfigHelper;
+use Iyzico\Iyzipay\Helper\UtilityHelper;
+use Iyzico\Iyzipay\Library\Model\CheckoutForm;
+use Iyzico\Iyzipay\Library\Options;
+use Iyzico\Iyzipay\Library\Request\RetrieveCheckoutFormRequest;
 use Iyzico\Iyzipay\Logger\IyziErrorLogger;
-use Iyzico\Iyzipay\Model\IyziCardFactory;
-use Iyzico\Iyzipay\Model\ResourceModel\IyziOrderJob\Collection as IyziOrderJobCollection;
+use Iyzico\Iyzipay\Service\CardService;
+use Iyzico\Iyzipay\Service\OrderJobService;
+use Iyzico\Iyzipay\Service\OrderService;
 use Magento\Checkout\Model\Session as CheckoutSession;
 use Magento\Customer\Model\Session as CustomerSession;
-use Magento\Framework\App\Action\Action;
-use Magento\Framework\App\Action\Context;
-use Magento\Framework\App\Config\ScopeConfigInterface;
+use Magento\Framework\App\Action\HttpPostActionInterface;
 use Magento\Framework\App\CsrfAwareActionInterface;
 use Magento\Framework\App\Request\InvalidRequestException;
 use Magento\Framework\App\RequestInterface;
 use Magento\Framework\Controller\ResultFactory;
 use Magento\Framework\Exception\NoSuchEntityException;
 use Magento\Framework\Message\ManagerInterface;
-use Magento\Framework\View\Element\Template\Context as TemplateContext;
+use Magento\Quote\Api\CartRepositoryInterface;
+use Magento\Quote\Api\Data\CartInterface;
+use Magento\Quote\Model\Quote;
+use Magento\Quote\Model\ResourceModel\Quote as QuoteResource;
+use Magento\Framework\Exception\LocalizedException;
 use Magento\Quote\Api\CartManagementInterface;
-use Magento\Sales\Api\Data\OrderInterface;
-use Magento\Sales\Api\OrderRepositoryInterface;
-use Magento\Sales\Model\Order\Payment\Transaction;
-use Magento\Store\Model\ScopeInterface;
-use Magento\Store\Model\StoreManagerInterface;
-use Throwable;
 
-class IyzipayResponse extends Action implements CsrfAwareActionInterface
+class IyzipayResponse implements HttpPostActionInterface, CsrfAwareActionInterface
 {
-    protected Context $context;
-    protected CheckoutSession $checkoutSession;
-    protected CustomerSession $customerSession;
-    protected TemplateContext $templateContext;
-    protected CartManagementInterface $cartManagement;
-    protected OrderRepositoryInterface $orderRepository;
-    protected $resultFactory;
-    protected ScopeConfigInterface $scopeConfig;
-    protected IyziCardFactory $iyziCardFactory;
-    protected $messageManager;
-    protected StoreManagerInterface $storeManager;
-    protected PriceHelper $priceHelper;
-    protected IyziErrorLogger $errorLogger;
-    protected ResponseObjectHelper $responseObjectHelper;
-    protected IyziOrderJobCollection $iyziOrderJobCollection;
-    protected WebhookHelperFactory $webhookHelperFactory;
-    protected PkiStringBuilderFactory $pkiStringBuilderFactory;
-    protected RequestHelperFactory $requestHelperFactory;
-
     public function __construct(
-        Context                  $context,
-        CheckoutSession          $checkoutSession,
-        CustomerSession          $customerSession,
-        CartManagementInterface  $cartManagement,
-        OrderRepositoryInterface $orderRepository,
-        ResultFactory            $resultFactory,
-        ScopeConfigInterface     $scopeConfig,
-        IyziCardFactory          $iyziCardFactory,
-        ManagerInterface         $messageManager,
-        StoreManagerInterface    $storeManager,
-        PriceHelper              $priceHelper,
-        IyziErrorLogger          $errorLogger,
-        ResponseObjectHelper     $responseObjectHelper,
-        IyziOrderJobCollection   $iyziOrderJobCollection,
-        WebhookHelperFactory     $webhookHelperFactory,
-        PkiStringBuilderFactory  $pkiStringBuilderFactory,
-        RequestHelperFactory     $requestHelperFactory
-    )
-    {
-        parent::__construct($context);
-        $this->checkoutSession = $checkoutSession;
-        $this->customerSession = $customerSession;
-        $this->cartManagement = $cartManagement;
-        $this->orderRepository = $orderRepository;
-        $this->resultFactory = $resultFactory;
-        $this->scopeConfig = $scopeConfig;
-        $this->iyziCardFactory = $iyziCardFactory;
-        $this->messageManager = $messageManager;
-        $this->storeManager = $storeManager;
-        $this->priceHelper = $priceHelper;
-        $this->errorLogger = $errorLogger;
-        $this->responseObjectHelper = $responseObjectHelper;
-        $this->iyziOrderJobCollection = $iyziOrderJobCollection;
-        $this->webhookHelperFactory = $webhookHelperFactory;
-        $this->pkiStringBuilderFactory = $pkiStringBuilderFactory;
-        $this->requestHelperFactory = $requestHelperFactory;
+        private readonly RequestInterface $request,
+        private readonly CheckoutSession $checkoutSession,
+        private readonly CustomerSession $customerSession,
+        private readonly ManagerInterface $messageManager,
+        private readonly IyziErrorLogger $errorLogger,
+        private readonly CartRepositoryInterface $quoteRepository,
+        private readonly ResultFactory $resultFactory,
+        private readonly ConfigHelper $configHelper,
+        private readonly OrderJobService $orderJobService,
+        private readonly OrderService $orderService,
+        private readonly CardService $cardService,
+        private readonly UtilityHelper $utilityHelper,
+        private readonly QuoteResource $quoteResource,
+        private readonly CartManagementInterface $cartManagement,
+    ) {
     }
 
     /**
@@ -120,13 +73,16 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
      *
      * This function is responsible for creating the csrf validation exception.
      *
-     * @param RequestInterface $request
+     * @param  RequestInterface  $request
      * @return InvalidRequestException|null
      */
     public function createCsrfValidationException(RequestInterface $request): ?InvalidRequestException
     {
         $params = $request->getParams();
-        $this->errorLogger->critical("createCsrfValidationException: " . json_encode($params), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+        $this->errorLogger->critical(
+            "createCsrfValidationException: " . json_encode($params),
+            ['fileName' => __FILE__, 'lineNumber' => __LINE__]
+        );
         return null;
     }
 
@@ -135,7 +91,7 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
      *
      * This function is responsible for validating the csrf.
      *
-     * @param RequestInterface $request
+     * @param  RequestInterface  $request
      * @return bool|null
      */
     public function validateForCsrf(RequestInterface $request): ?bool
@@ -148,606 +104,130 @@ class IyzipayResponse extends Action implements CsrfAwareActionInterface
      */
     public function execute()
     {
-        return $this->response();
-    }
-
-    /**
-     *
-     *
-     * @throws Exception
-     */
-    public function response()
-    {
         try {
-            $token = $this->getToken();
-            $orderId = $this->findParametersByToken($token, 'order_id');
-            $order = $this->findOrderById($orderId);
-            $response = $this->getPaymentDetail($token);
+            $token = $this->request->getParam('token');
+            $locale = $this->configHelper->getLocale();
 
-            $this->updateOrderPaymentStatus($orderId, $response);
-            $this->updateOrderJobPaymentId($orderId, $response);
+            $quoteId = $this->orderJobService->findParametersByToken($token, 'quote_id');
+            $conversationId = $this->orderJobService->findParametersByToken($token, 'iyzico_conversation_id');
 
-            if ($this->getUserId() != 0) {
-                $this->setUserCard($response);
+            $apiKey = $this->configHelper->getApiKey();
+            $secretKey = $this->configHelper->getSecretKey();
+            $baseUrl = $this->configHelper->getBaseUrl();
+
+            $quote = $this->findQuoteById($quoteId);
+
+            if ($quote == null) {
+                $this->messageManager->addErrorMessage(__('An error occurred while processing your payment. Please try again.'));
+                $resultRedirect = $this->resultFactory->create(ResultFactory::TYPE_REDIRECT);
+                return $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
             }
 
-            if (isset($response->errorCode)) {
-                return $this->handleError($response, $this->resultRedirectFactory->create());
+            $request = new RetrieveCheckoutFormRequest();
+            $request->setLocale($locale);
+            $request->setConversationId($conversationId);
+            $request->setToken($token);
+
+            $options = new Options();
+            $options->setBaseUrl($baseUrl);
+            $options->setApiKey($apiKey);
+            $options->setSecretKey($secretKey);
+
+            $response = CheckoutForm::retrieve($request, $options);
+
+            $responsePaymentStatus = $response->getPaymentStatus();
+            $responsePaymentId = $response->getPaymentId();
+            $responseCurrency = $response->getCurrency();
+            $responseBasketId = $response->getBasketId();
+            $responseConversationId = $response->getConversationId();
+            $responsePaidPrice = $response->getPaidPrice();
+            $responsePrice = $response->getPrice();
+            $responseToken = $response->getToken();
+            $responseSignature = $response->getSignature();
+
+            $calculateSignature = $this->utilityHelper->calculateHmacSHA256Signature([
+                $responsePaymentStatus,
+                $responsePaymentId,
+                $responseCurrency,
+                $responseBasketId,
+                $responseConversationId,
+                $responsePaidPrice,
+                $responsePrice,
+                $responseToken
+            ], $secretKey);
+
+            if ($responseSignature !== $calculateSignature) {
+                $this->messageManager->addErrorMessage(__('An error occurred while processing your payment. Please try again.'));
+                $resultRedirect = $this->resultFactory->create(ResultFactory::TYPE_REDIRECT);
+                return $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
             }
 
-            $this->checkoutSession->setLastQuoteId($order->getQuoteId())
-                ->setLastSuccessQuoteId($order->getQuoteId())
-                ->setLastOrderId($order->getId())
-                ->setLastRealOrderId($order->getIncrementId())
-                ->setLastOrderStatus($order->getStatus());
+            switch ($response->getStatus()) {
+                case 'success':
+                    $order = $this->orderService->placeOrder($quoteId, $this->customerSession, $this->cartManagement);
+                    $orderId = $order->getId();
 
-            $this->checkoutSession->getQuote()->setIsActive(false)->save();
+                    $this->orderJobService->assignOrderIdToIyzicoOrderJob($orderId, $quoteId);
+                    $this->orderService->updateOrderPaymentStatus($orderId, $response);
 
-            $resultRedirect = $this->resultRedirectFactory->create();
-            return $resultRedirect->setPath('checkout/onepage/success', ['_secure' => true]);
+                    $customerId = $this->utilityHelper->getCustomerId($this->customerSession);
+                    if ($customerId != 0) {
+                        $this->cardService->setUserCard($response, $apiKey, $customerId);
+                    }
+
+                    $this->checkoutSession->setLastQuoteId($quoteId);
+                    $this->checkoutSession->setLastSuccessQuoteId($order->getQuoteId());
+                    $this->checkoutSession->setLastOrderId($order->getId());
+                    $this->checkoutSession->setLastRealOrderId($order->getIncrementId());
+                    $this->checkoutSession->setLastOrderStatus($order->getStatus());
+
+                    $quote = $this->checkoutSession->getQuote();
+                    $quote->setIsActive(false);
+
+                    try {
+                        $this->quoteResource->save($quote);
+                    } catch (Exception $e) {
+                        $this->errorLogger->critical("Quote save error: " . $e->getMessage());
+                        throw new LocalizedException(__('Quote could not be saved.'));
+                    }
+
+                    $resultRedirect = $this->resultFactory->create(ResultFactory::TYPE_REDIRECT);
+                    return $resultRedirect->setPath('checkout/onepage/success', ['_secure' => true]);
+                default:
+                    $this->messageManager->addErrorMessage(__('An error occurred while processing your payment. Please try again.'));
+                    $resultRedirect = $this->resultFactory->create(ResultFactory::TYPE_REDIRECT);
+                    return $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
+            }
 
         } catch (Exception $e) {
-            $this->errorLogger->critical("execute error: " . $e->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+            $this->errorLogger->critical(
+                "execute error: " . $e->getMessage(),
+                ['fileName' => __FILE__, 'lineNumber' => __LINE__]
+            );
             $this->messageManager->addErrorMessage(__('An error occurred while processing your payment. Please try again.'));
-            $resultRedirect = $this->resultRedirectFactory->create();
+            $resultRedirect = $this->resultFactory->create(ResultFactory::TYPE_REDIRECT);
             return $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
         }
-
     }
 
     /**
-     * Get Token
+     * Find Quote By Id
      *
-     * This function is responsible for validating the token and returning the result.
+     * This function is responsible for finding the quote by id.
      *
-     * @return string
+     * @param  string  $quoteId
+     * @return CartInterface|Quote|null
      */
-    private function getToken()
-    {
-        return $this->getRequest()->getPostValue()['token'];
-    }
-
-    /**
-     * Find Parameters By Token
-     *
-     * This function is responsible for finding the parameters by token.
-     *
-     * @param string $token
-     * @return mixed
-     */
-    private function findParametersByToken(string $token, string $find): mixed
-    {
-        $iyzicoOrderJob = $this->iyziOrderJobCollection->addFieldToFilter('iyzico_payment_token', $token)->getFirstItem();
-        return $iyzicoOrderJob->getData($find);
-    }
-
-    /**
-     * Find Order By Id
-     *
-     * This function is responsible for finding the order by id.
-     *
-     * @param string $orderId
-     * @return OrderInterface|null
-     */
-    private function findOrderById(string $orderId): OrderInterface|null
+    private function findQuoteById(string $quoteId): CartInterface|Quote|null
     {
         try {
-            return $this->orderRepository->get($orderId);
+            return $this->quoteRepository->get($quoteId);
         } catch (NoSuchEntityException $e) {
-            $this->errorLogger->critical("findOrderById: $orderId - Message: " . $e->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+            $this->errorLogger->critical(
+                "findQuoteById: $quoteId - Message: " . $e->getMessage(),
+                ['fileName' => __FILE__, 'lineNumber' => __LINE__]
+            );
             return null;
         }
-    }
-
-    /**
-     * Retrive Payment Detail
-     *
-     * This function is responsible for retriving the payment detail.
-     *
-     * @param string $token
-     * @return object
-     */
-    public function getPaymentDetail(string $token)
-    {
-        $defination = $this->getPaymentDefinition();
-        $pkiStringBuilder = $this->getPkiStringBuilder();
-        $requestHelper = $this->getRequestHelper();
-        $conversationId = $this->findParametersByToken($token, 'iyzico_conversation_id');
-
-        $tokenDetailObject = $this->responseObjectHelper->createTokenDetailObject($conversationId, $token);
-        $iyzicoPkiString = $pkiStringBuilder->generatePkiString($tokenDetailObject);
-        $authorization = $pkiStringBuilder->generateAuthorization($iyzicoPkiString, $defination['apiKey'], $defination['secretKey'], $defination['rand']);
-        $iyzicoJson = json_encode($tokenDetailObject, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-
-        return $requestHelper->sendCheckoutFormDetailRequest($defination['baseUrl'], $iyzicoJson, $authorization);
-    }
-
-    /**
-     * Get Payment Definition
-     *
-     * This function is responsible for getting the payment definition.
-     *
-     * @return array
-     */
-    private function getPaymentDefinition()
-    {
-        $websiteId = $this->storeManager->getWebsite()->getId();
-
-        return [
-            'rand' => uniqid(),
-            'baseUrl' => $this->scopeConfig->getValue(
-                'payment/iyzipay/sandbox',
-                ScopeInterface::SCOPE_WEBSITES,
-                $websiteId
-            ) ? 'https://sandbox-api.iyzipay.com' : 'https://api.iyzipay.com',
-            'apiKey' => $this->scopeConfig->getValue(
-                'payment/iyzipay/api_key',
-                ScopeInterface::SCOPE_WEBSITES,
-                $websiteId
-            ),
-            'secretKey' => $this->scopeConfig->getValue(
-                'payment/iyzipay/secret_key',
-                ScopeInterface::SCOPE_WEBSITES,
-                $websiteId
-            )
-        ];
-    }
-
-    /**
-     * Get Pki String Builder
-     *
-     * This function is responsible for getting the pki string builder.
-     *
-     * @return PkiStringBuilder
-     */
-    private function getPkiStringBuilder(): PkiStringBuilder
-    {
-        return $this->pkiStringBuilderFactory->create();
-    }
-
-    /**
-     * Get Request Helper
-     *
-     * This function is responsible for getting the request helper.
-     *
-     * @return RequestHelper
-     */
-    private function getRequestHelper(): RequestHelper
-    {
-        return $this->requestHelperFactory->create();
-    }
-
-    /**
-     * Update Order Payment Status
-     *
-     * This function is responsible for updating the order payment status based on the response.
-     *
-     * @param string $orderId
-     * @param object $response
-     *
-     * @return void
-     * @throws Exception
-     */
-    private function updateOrderPaymentStatus(string $orderId, object $response): void
-    {
-        $order = $this->findOrderById($orderId);
-        $payment = $order->getPayment();
-
-        $paymentStatus = $response->paymentStatus;
-        $status = $response->status;
-
-        // Set iyzico payment details in standard Magento payment fields
-        $payment->setLastTransId($response->paymentId);
-
-        // Store additional payment information
-        $paymentAdditionalInformation = [
-            'method_title' => 'Kredi/Banka Kartı ile Ödeme',
-            'iyzico_payment_id' => $response->paymentId,
-            'iyzico_conversation_id' => $response->conversationId,
-        ];
-
-        $payment->setAdditionalInformation($paymentAdditionalInformation);
-
-        // Set transaction information
-        $payment->setTransactionId($response->paymentId)
-            ->setIsTransactionClosed(0)
-            ->setTransactionAdditionalInfo(
-                Transaction::RAW_DETAILS,
-                json_encode($paymentAdditionalInformation)
-            );
-
-        if ($paymentStatus == 'PENDING_CREDIT' && $status == 'success') {
-            $order->setState("pending_payment")->setStatus("pending_payment");
-            $order->addCommentToStatusHistory(__("PENDING_CREDIT"));
-            $this->setOrderJobStatus($orderId, "pending_payment");
-        }
-
-        if ($paymentStatus == 'INIT_BANK_TRANSFER' && $status == 'success') {
-            $order->setState("pending_payment")->setStatus("pending_payment");
-            $order->addCommentToStatusHistory(__("INIT_BANK_TRANSFER"));
-            $this->setOrderJobStatus($orderId, "pending_payment");
-        }
-
-        if ($paymentStatus == 'SUCCESS' && $status == 'success') {
-            $order->setState("processing")->setStatus("processing");
-            $order->addCommentToStatusHistory(__("SUCCESS"));
-            $this->setOrderJobStatus($orderId, "processing");
-        }
-
-        if ($response->installment > 1) {
-            $order = $this->setOrderInstallmentFee($order, $response->paidPrice, $response->installment);
-        }
-
-        $order->addCommentToStatusHistory("Payment ID: " . $response->paymentId . " - Conversation ID:" . $response->conversationId);
-        $order->save();
-    }
-
-    /**
-     * Set Iyzipay Order Job
-     *
-     * This function is responsible for saving the iyzi order job.
-     *
-     * @param string $orderId
-     * @param string $status
-     * @return void
-     */
-    private function setOrderJobStatus(string $orderId, string $status)
-    {
-        $iyziOrderJob = $this->iyziOrderJobCollection->addFieldToFilter('order_id', $orderId)->getFirstItem();
-        $iyziOrderJob->setStatus($status);
-        try {
-            if ($status == 'processing' || $status == 'canceled') {
-                $iyziOrderJob->delete();
-            } else {
-                $iyziOrderJob->save();
-            }
-        } catch (Throwable $th) {
-            $this->errorLogger->critical("setIyziOrderJob: " . $th->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
-        }
-    }
-
-    /**
-     * Handle Installment Fee
-     *
-     * This function is responsible for handling the installment fee.
-     *
-     * @param $order
-     * @param $paidPrice
-     * @param $installment
-     * @return mixed
-     */
-    private function setOrderInstallmentFee($order, $paidPrice, $installment)
-    {
-        $grandTotal = $order->getGrandTotal();
-
-        $installmentPrice = $this->priceHelper->calculateInstallmentPrice($paidPrice, $grandTotal);
-
-        $order->setInstallmentFee($installmentPrice);
-        $order->setInstallmentCount($installment);
-
-        return $order;
-    }
-
-    /**
-     * Update Order Job Payment Id
-     *
-     * This function is responsible for updating the order payment status based on the response.
-     *
-     * @param string $orderId
-     * @param object $response
-     *
-     * @return void
-     * @throws Exception
-     */
-    private function updateOrderJobPaymentId(string $orderId, object $response): void
-    {
-        $order = $this->findOrderById($orderId);
-        $paymentId = $response->paymentId;
-        $this->setOrderJobPaymentId($orderId, $paymentId);
-        $order->save();
-    }
-
-    /**
-     * Set Iyzipay Order Job
-     *
-     * This function is responsible for saving the iyzi order job.
-     *
-     * @param string $orderId
-     * @param string $status
-     * @return void
-     */
-    private function setOrderJobPaymentId(string $orderId, string $paymentId)
-    {
-        $iyziOrderJob = $this->iyziOrderJobCollection->addFieldToFilter('order_id', $orderId)->getFirstItem();
-        $iyziOrderJob->setIyzicoPaymentId($paymentId);
-        try {
-            $iyziOrderJob->save();
-        } catch (Throwable $th) {
-            $this->errorLogger->critical("setIyziOrderJob: " . $th->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
-        }
-    }
-
-    /**
-     * Get User Id
-     *
-     * This function is responsible for checking if the user is logged in.
-     *
-     * @return int
-     */
-    private function getUserId(): int
-    {
-        if (!$this->customerSession->isLoggedIn()) {
-            return 0;
-        } else {
-            return $this->customerSession->getCustomerId();
-        }
-    }
-
-    /**
-     * Save User Card
-     *
-     * This function is responsible for saving the user card.
-     *
-     * @param object $response
-     * @return bool
-     * @throws Exception
-     */
-    private function setUserCard(object $response): bool
-    {
-        $defination = $this->getPaymentDefinition();
-        $customerId = $this->getUserId();
-
-        if (isset($response->cardUserKey) && $customerId != 0) {
-            $iyziCardFind = $this->iyziCardFactory->create()->getCollection()
-                ->addFieldToFilter('customer_id', $customerId)
-                ->addFieldToFilter('api_key', $defination['apiKey'])
-                ->addFieldToSelect('card_user_key');
-
-            $iyziCardFind = $iyziCardFind->getData();
-
-            $customerCardUserKey = !empty($iyziCardFind[0]['card_user_key']) ? $iyziCardFind[0]['card_user_key'] : null;
-
-            if ($response->cardUserKey != $customerCardUserKey) {
-                $iyziCardModel = $this->iyziCardFactory->create([
-                    'customer_id' => $customerId,
-                    'card_user_key' => $response->cardUserKey,
-                    'api_key' => $defination['apiKey'],
-                ]);
-                $iyziCardModel->save();
-            }
-            return true;
-        }
-
-        return false;
-    }
-
-    /**
-     * Handle Error Response
-     *
-     * This function is responsible for handling the error response.
-     *
-     * @param object $response
-     * @param $resultRedirect
-     * @return mixed
-     */
-    private function handleError(object $response, $resultRedirect): mixed
-    {
-        $errorCode = ErrorCode::from($response->errorCode);
-        $errorMessage = $errorCode->getErrorMessage();
-
-        $this->errorLogger->critical("handleError: " . $response->errorCode . '-' . $errorMessage, ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
-
-        $this->messageManager->addError($errorMessage);
-        return $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
-    }
-
-    /**
-     * Process Webhook Response
-     *
-     * This function is responsible for processing the webhook response.
-     *
-     * @throws Exception
-     */
-    public function webhook(string $token, string $iyziEventType)
-    {
-        $orderId = $this->findParametersByToken($token, 'order_id');
-        $response = $this->getPaymentDetail($token);
-
-        $this->updateOrderFromWebhook($iyziEventType, $orderId, $response);
-
-        if (isset($response->errorCode)) {
-            $this->handleWebhookError($response);
-        }
-    }
-
-    /**
-     * Update Order Payment Status From Webhook
-     *
-     * This function is responsible for updating the order payment status from the webhook.
-     *
-     * @param string $iyziEventType
-     * @param string $orderId
-     * @param object $response
-     *
-     * @return void
-     * @throws Exception
-     */
-    private function updateOrderFromWebhook(string $iyziEventType, string $orderId, object $response): void
-    {
-        $order = $this->findOrderById($orderId);
-        $payment = $order->getPayment();
-
-        $defaultState = $order->getState();
-        $defaultStatus = $order->getStatus();
-
-        // Update payment information if not already set
-        if (!$payment->getLastTransId()) {
-            $payment->setLastTransId($response->paymentId);
-
-            $paymentAdditionalInformation = [
-                'method_title' => 'Kredi/Banka Kartı ile Ödeme',
-                'iyzico_payment_id' => $response->paymentId,
-                'iyzico_conversation_id' => $response->conversationId,
-            ];
-
-            $payment->setAdditionalInformation($paymentAdditionalInformation);
-
-            $payment->setTransactionId($response->paymentId)
-                ->setIsTransactionClosed(0)
-                ->setTransactionAdditionalInfo(
-                    Transaction::RAW_DETAILS,
-                    json_encode($paymentAdditionalInformation)
-                );
-        }
-
-        $orderStatusDetails = $this->findOrderStatusDetails($iyziEventType, $response->status, $response->paymentStatus);
-
-        $order->setState($orderStatusDetails['state'] ?? $defaultState);
-        $order->setStatus($orderStatusDetails['status'] ?? $defaultStatus);
-        $order->addCommentToStatusHistory($orderStatusDetails['comment'] ?? "The order status has been updated by the webhook.");
-
-        if ($response->installment > 1) {
-            $order = $this->setOrderInstallmentFee($order, $response->paidPrice, $response->installment);
-        }
-
-        $payment->save();
-        $order->save();
-        $this->setOrderJobStatus($orderId, $orderStatusDetails['state'] ?? $defaultState);
-    }
-
-    /**
-     * Find Order Status Details
-     *
-     * This function is responsible for finding the order status details.
-     *
-     * @param string $iyziEventType
-     * @param string $status
-     * @param string $paymentStatus
-     * @return array
-     */
-    private function findOrderStatusDetails(string $iyziEventType, string $status, string $paymentStatus): array
-    {
-        if ($iyziEventType === 'BANK_TRANSFER_AUTH' && $status === 'success') {
-            return [
-                'state' => 'processing',
-                'status' => 'processing',
-                'comment' => __("BANK_TRANSFER_AUTH_SUCCESS")
-            ];
-        }
-
-        if ($iyziEventType === 'CREDIT_PAYMENT_INIT' && $status === 'INIT_CREDIT') {
-            return [
-                'state' => 'pending_payment',
-                'status' => 'pending_payment',
-                'comment' => __("INIT_CREDIT")
-            ];
-        }
-
-        if ($iyziEventType === 'CREDIT_PAYMENT_PENDING' && $paymentStatus === 'PENDING_CREDIT') {
-            return [
-                'state' => 'pending_payment',
-                'status' => 'pending_payment',
-                'comment' => __("CREDIT_PAYMENT_PENDING")
-            ];
-        }
-
-        if ($iyziEventType === 'CREDIT_PAYMENT_AUTH' && $status === 'success') {
-            return [
-                'state' => 'processing',
-                'status' => 'processing',
-                'comment' => __("CREDIT_PAYMENT_AUTH_SUCCESS")
-            ];
-        }
-
-        if ($iyziEventType === 'CREDIT_PAYMENT_AUTH' && $status === 'FAILURE') {
-            return [
-                'state' => 'canceled',
-                'status' => 'canceled',
-                'comment' => __("CREDIT_PAYMENT_AUTH_FAILURE")
-            ];
-        }
-
-        return [];
-    }
-
-    /**
-     * Handle Webhook Response
-     *
-     * This function is responsible for handling the webhook response.
-     *
-     * @param object $response
-     * @return void
-     */
-    private function handleWebhookError(object $response): void
-    {
-        $webhookHelper = $this->getWebhookHelper();
-        $status = $response->status;
-        $paymentStatus = $response->paymentStatus;
-
-        if ($status == 'failure' && $paymentStatus != 'SUCCESS') {
-            $errorCode = ErrorCode::from($response->errorCode);
-            $errorMessage = $errorCode->getErrorMessage();
-            $webhookHelper->webhookHttpResponse($response->errorCode . '-' . $errorMessage, 404);
-            $this->errorLogger->critical("handleWebhookError: " . $response->errorCode . '-' . $errorMessage, ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
-        }
-    }
-
-    /**
-     * Get Webhook Helper
-     *
-     * This function is responsible for getting the webhook helper.
-     *
-     * @return WebhookHelper
-     */
-    private function getWebhookHelper(): WebhookHelper
-    {
-        return $this->webhookHelperFactory->create();
-    }
-
-    /**
-     * Set Iyzipay Order Job
-     *
-     * This function is responsible for saving the iyzi order.
-     *
-     * @param object $response
-     * @param string $orderId
-     * @return void
-     */
-    private function setIyziOrder(object $response, string $orderId)
-    {
-        try {
-            // Load the order by order ID
-            $order = $this->orderRepository->get($orderId);
-
-            // Get the payment object from the order
-            $payment = $order->getPayment();
-
-            // Set the iyzico_payment_id and iyzico_conversation_id fields
-            $payment->setData('iyzico_payment_id', $response->paymentId);
-            $payment->setData('iyzico_conversation_id', $response->conversationId);
-
-            // Save the updated order payment data
-            $this->orderRepository->save($order);
-
-        } catch (Throwable $th) {
-            $this->errorLogger->critical("setIyziOrder: " . $th->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
-        }
-    }
-
-    /**
-     * Get Iyzipay Module order_status from configuration : TODO
-     *
-     * This function is responsible for getting the order status from the configuration.
-     *
-     * @return string
-     */
-    private function getIyzipayOrderStatus(): string
-    {
-        $websiteId = $this->storeManager->getWebsite()->getId();
-        return $this->scopeConfig->getValue(
-            'payment/iyzipay/order_status',
-            ScopeInterface::SCOPE_WEBSITES,
-            $websiteId
-        );
     }
 }

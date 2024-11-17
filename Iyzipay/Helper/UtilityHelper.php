@@ -3,8 +3,8 @@
 namespace Iyzico\Iyzipay\Helper;
 
 use Iyzico\Iyzipay\Model\IyziCardFactory;
+use Magento\Quote\Model\Quote;
 use Magento\Customer\Model\Session as CustomerSession;
-use Magento\Quote\Model\Quote\Item;
 
 class UtilityHelper
 {
@@ -130,18 +130,6 @@ class UtilityHelper
     }
 
     /**
-     * Extract Locale
-     *
-     * @param  string  $locale
-     * @return string
-     */
-    public function extractLocale(string $locale): string
-    {
-        $localeParts = explode('_', $locale);
-        return $localeParts[0];
-    }
-
-    /**
      * Concatenate Strings
      *
      * @param  string  ...$address
@@ -204,6 +192,7 @@ class UtilityHelper
      *
      * This function is responsible for getting the customer card user key.
      *
+     * @param  IyziCardFactory  $iyziCardFactory
      * @param  int  $customerId
      * @param  string  $apiKey
      * @return string
@@ -221,12 +210,52 @@ class UtilityHelper
         return '';
     }
 
-    public function calculateHmacSHA256Signature($params, $secretKey): string
+
+    /**
+     * Calculate HMAC SHA256 Signature
+     *
+     * @param  array  $params
+     * @param  string  $secretKey
+     * @return string
+     */
+    public function calculateHmacSHA256Signature(array $params, string $secretKey): string
     {
         $dataToSign = implode(':', $params);
         $mac = hash_hmac('sha256', $dataToSign, $secretKey, true);
 
         return bin2hex($mac);
+    }
+
+    /**
+     * Get Locale Name
+     *
+     * @param $locale
+     * @return string
+     */
+    public function cutLocale($locale): string
+    {
+
+        $locale = explode('_', $locale);
+        return $locale[0];
+    }
+
+    /**
+     * Store Session Data
+     *
+     * This function is responsible for storing the session data.
+     *
+     * @param  Quote  $checkoutSession
+     * @param  CustomerSession  $customerSession
+     * @return void
+     */
+    public function storeSessionData(
+        Quote $checkoutSession,
+        CustomerSession $customerSession
+    ): void {
+        $customerEmail = $checkoutSession->getBillingAddress()->getEmail();
+        $quoteId = $checkoutSession->getId();
+        $checkoutSession->setGuestQuoteId($quoteId);
+        $customerSession->setEmail($customerEmail);
     }
 
 }
