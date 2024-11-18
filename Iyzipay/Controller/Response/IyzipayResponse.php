@@ -135,10 +135,10 @@ class IyzipayResponse implements HttpPostActionInterface, CsrfAwareActionInterfa
 
             $response = CheckoutForm::retrieve($request, $options);
 
-            $responsePaymentStatus = $response->getPaymentStatus();
-            $responsePaymentId = $response->getPaymentId();
-            $responseCurrency = $response->getCurrency();
-            $responseBasketId = $response->getBasketId();
+                    $responsePaymentStatus = $response->getPaymentStatus();
+                    $responsePaymentId = $response->getPaymentId();
+                    $responseCurrency = $response->getCurrency();
+                    $responseBasketId = $response->getBasketId();
             $responseConversationId = $response->getConversationId();
             $responsePaidPrice = $response->getPaidPrice();
             $responsePrice = $response->getPrice();

@@ -65,7 +65,7 @@ define([
             }
 
             $.ajax({
-                url: urlBuilder.build("Iyzico_Iyzipay/request/iyzipayrequest"),
+                url: urlBuilder.build("iyzico/request/iyzipayrequest"),
                 data: {
                     iyziQuoteEmail: quoteEmail,
                     iyziQuoteId: guestQuoteId

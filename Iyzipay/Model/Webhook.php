@@ -2,13 +2,23 @@
 
 namespace Iyzico\Iyzipay\Model;
 
+use Exception;
 use Iyzico\Iyzipay\Api\WebhookInterface;
 use Iyzico\Iyzipay\Helper\ConfigHelper;
 use Iyzico\Iyzipay\Helper\UtilityHelper;
+use Iyzico\Iyzipay\Library\Model\CheckoutForm;
+use Iyzico\Iyzipay\Library\Options;
+use Iyzico\Iyzipay\Library\Request\RetrieveCheckoutFormRequest;
+use Iyzico\Iyzipay\Logger\IyziWebhookLogger;
 use Iyzico\Iyzipay\Model\Data\WebhookData;
+use Iyzico\Iyzipay\Service\OrderJobService;
+use Iyzico\Iyzipay\Service\OrderService;
+use Magento\Framework\Api\SearchCriteriaBuilder;
+use Magento\Framework\App\ObjectManager;
 use Magento\Framework\App\RequestInterface;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\Exception\NotFoundException;
+use Magento\Sales\Api\OrderPaymentRepositoryInterface;
 
 class Webhook implements WebhookInterface
 {
@@ -16,15 +26,19 @@ class Webhook implements WebhookInterface
     protected WebhookData $webhookData;
 
     public function __construct(
-        protected RequestInterface $request,
-        protected ConfigHelper $configHelper,
-        protected UtilityHelper $utilityHelper
+        protected readonly RequestInterface $request,
+        protected readonly ConfigHelper $configHelper,
+        protected readonly UtilityHelper $utilityHelper,
+        protected readonly OrderService $orderService,
+        protected readonly OrderJobService $orderJobService,
+        protected readonly IyziWebhookLogger $iyziWebhookLogger
     ) {
     }
 
     /**
      * @inheritDoc
      * @throws LocalizedException
+     * @throws Exception
      */
     public function check(string $webhookUrlKey): void
     {
@@ -42,9 +56,9 @@ class Webhook implements WebhookInterface
         $signatureMatchStatus = $this->validateSignature($this->signatureV3, $hmac256Signature);
 
         if (!$signatureMatchStatus) {
-            echo "Bu kısımda iyzico ödeme durumu sorgulama işlemi yapılacak";
+            $this->processWebhook($this->webhookData);
         } else {
-            echo "Bu kısımda ödeme durumu güncelleme işlemi yapılacak";
+            $this->processWebhookV3($this->webhookData);
         }
     }
 
@@ -131,7 +145,7 @@ class Webhook implements WebhookInterface
 
     public function generateKey(string $secretKey, WebhookData $webhookData): string
     {
-        return $secretKey.$webhookData->getIyziEventType().$webhookData->getIyziPaymentId().$webhookData->getPaymentConversationId().$webhookData->getStatus();
+        return $secretKey . $webhookData->getIyziEventType() . $webhookData->getIyziPaymentId() . $webhookData->getPaymentConversationId() . $webhookData->getStatus();
     }
 
     /**
@@ -144,20 +158,87 @@ class Webhook implements WebhookInterface
 
     /**
      * @inheritDoc
+     * @throws LocalizedException
+     * @throws Exception
      */
-    public function processWebhook(array $data): mixed
+    public function processWebhook(WebhookData $webhookData): void
     {
-        // TODO: Implement processWebhook() method.
-        return null;
+        $token = $webhookData->getToken();
+        $conversationId = $webhookData->getPaymentConversationId();
+        $locale = $this->configHelper->getLocale();
+
+        $apiKey = $this->configHelper->getApiKey();
+        $secretKey = $this->configHelper->getSecretKey();
+        $baseUrl = $this->configHelper->getBaseUrl();
+
+        $request = new RetrieveCheckoutFormRequest();
+        $request->setLocale($locale);
+        $request->setConversationId($conversationId);
+        $request->setToken($token);
+
+        $options = new Options();
+        $options->setBaseUrl($baseUrl);
+        $options->setApiKey($apiKey);
+        $options->setSecretKey($secretKey);
+
+        $response = CheckoutForm::retrieve($request, $options);
+
+        $responsePaymentStatus = $response->getPaymentStatus();
+        $responsePaymentId = $response->getPaymentId();
+        $responseCurrency = $response->getCurrency();
+        $responseBasketId = $response->getBasketId();
+        $responseConversationId = $response->getConversationId();
+        $responsePaidPrice = $response->getPaidPrice();
+        $responsePrice = $response->getPrice();
+        $responseToken = $response->getToken();
+        $responseSignature = $response->getSignature();
+
+        $calculateSignature = $this->utilityHelper->calculateHmacSHA256Signature([
+            $responsePaymentStatus,
+            $responsePaymentId,
+            $responseCurrency,
+            $responseBasketId,
+            $responseConversationId,
+            $responsePaidPrice,
+            $responsePrice,
+            $responseToken
+        ], $secretKey);
+
+        if ($responseSignature !== $calculateSignature) {
+            throw new LocalizedException(__('Signature mismatch'));
+        }
+
+        $orderId = $this->orderJobService->findParametersByToken($token, 'order_id');
+
+        $this->orderService->updateOrderPaymentStatus($orderId, $response, true);
     }
 
     /**
      * @inheritDoc
+     * @throws Exception
      */
-    public function processWebhookV3(array $data): mixed
+    public function processWebhookV3(WebhookData $webhookData): void
     {
-        // TODO: Implement processWebhookV3() method.
-        return null;
+        $paymentId = $webhookData->getIyziPaymentId();
+
+        $objectManager = ObjectManager::getInstance();
+        $searchCriteriaBuilder = $objectManager->create(SearchCriteriaBuilder::class);
+        $orderPaymentRepository = $objectManager->create(OrderPaymentRepositoryInterface::class);
+
+        $searchCriteria = $searchCriteriaBuilder
+            ->addFilter('last_trans_id', $paymentId, 'eq')
+            ->create();
+
+        $paymentList = $orderPaymentRepository->getList($searchCriteria);
+
+        if ($paymentList->getTotalCount() === 0) {
+            throw new LocalizedException(__('Payment record not found for payment ID: %1', $paymentId));
+        }
+
+        $payment = $paymentList->getItems()[0];
+        $orderId = $payment->getParentId();
+
+        $this->orderService->updateOrderPaymentStatus($orderId, $webhookData);
     }
 
     /**
@@ -165,6 +246,13 @@ class Webhook implements WebhookInterface
      */
     public function logWebhookEvent(string $eventType, array $data, string $status): void
     {
-        // TODO: Implement logWebhookEvent() method.
+        $this->iyziWebhookLogger->info(
+            sprintf(
+                'Webhook event: %s, Status: %s, Data: %s',
+                $eventType,
+                $status,
+                json_encode($data)
+            )
+        );
     }
 }

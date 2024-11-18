@@ -40,18 +40,18 @@ interface WebhookInterface
     /**
      * Process Webhook
      *
-     * @param  array  $data
-     * @return mixed
+     * @param  WebhookData  $webhookData
+     * @return void
      */
-    public function processWebhook(array $data): mixed;
+    public function processWebhook(WebhookData $webhookData): void;
 
     /**
      * Process Webhook V3
      *
-     * @param  array  $data
-     * @return mixed
+     * @param  WebhookData  $webhookData
+     * @return void
      */
-    public function processWebhookV3(array $data): mixed;
+    public function processWebhookV3(WebhookData $webhookData): void;
 
     /**
      * Log Webhook Event

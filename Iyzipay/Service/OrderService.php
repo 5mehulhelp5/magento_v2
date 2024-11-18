@@ -3,21 +3,18 @@
 namespace Iyzico\Iyzipay\Service;
 
 use Exception;
+use Iyzico\Iyzipay\Helper\UtilityHelper;
+use Iyzico\Iyzipay\Logger\IyziErrorLogger;
+use Magento\Customer\Model\Session as CustomerSession;
 use Magento\Framework\Exception\CouldNotSaveException;
 use Magento\Framework\Exception\NoSuchEntityException;
-use Magento\Framework\Exception\LocalizedException;
-use Magento\Sales\Model\Order\Payment\Transaction;
-use Magento\Sales\Api\OrderRepositoryInterface;
-use Magento\Sales\Api\Data\OrderInterface;
+use Magento\Quote\Api\CartManagementInterface;
 use Magento\Quote\Model\QuoteManagement;
 use Magento\Quote\Model\QuoteRepository;
 use Magento\Quote\Model\ResourceModel\Quote;
-use Iyzico\Iyzipay\Helper\UtilityHelper;
-use Iyzico\Iyzipay\Library\Model\CheckoutForm;
-use Iyzico\Iyzipay\Logger\IyziErrorLogger;
-use Iyzico\Iyzipay\Service\OrderJobService;
-use Magento\Quote\Api\CartManagementInterface;
-use Magento\Customer\Model\Session as CustomerSession;
+use Magento\Sales\Api\Data\OrderInterface;
+use Magento\Sales\Api\OrderRepositoryInterface;
+use Magento\Sales\Model\Order\Payment\Transaction;
 
 class OrderService
 {
@@ -38,10 +35,13 @@ class OrderService
      *
      * This function is responsible for placing the order and setting the status to pending_payment.
      *
-     * @throws CouldNotSaveException
+     * @throws CouldNotSaveException|NoSuchEntityException
      */
-    public function placeOrder(int $quoteId, CustomerSession $customerSession, CartManagementInterface $cartManagement)
-    {
+    public function placeOrder(
+        int $quoteId,
+        CustomerSession $customerSession,
+        CartManagementInterface $cartManagement
+    ): OrderInterface {
         $quote = $this->quoteRepository->get($quoteId);
         if ($customerSession->isLoggedIn()) {
             $orderId = $cartManagement->placeOrder($quoteId);
@@ -69,12 +69,12 @@ class OrderService
      * This function is responsible for updating the order payment status based on the response.
      *
      * @param  string  $orderId
-     * @param  CheckoutForm  $response
+     * @param  $response
      *
      * @return void
      * @throws Exception
      */
-    public function updateOrderPaymentStatus(string $orderId, CheckoutForm $response): void
+    public function updateOrderPaymentStatus(string $orderId, $response, $isWebhook = false): void
     {
         $order = $this->findOrderById($orderId);
         $payment = $order->getPayment();
@@ -82,21 +82,23 @@ class OrderService
         $paymentStatus = $response->getPaymentStatus();
         $status = $response->getStatus();
 
-        $payment->setLastTransId($response->getPaymentId());
-        $paymentAdditionalInformation = [
-            'method_title' => 'Kredi/Banka Kartı ile Ödeme',
-            'iyzico_payment_id' => $response->getPaymentId(),
-            'iyzico_conversation_id' => $response->getConversationId(),
-        ];
+        if (!$isWebhook) {
+            $payment->setLastTransId($response->getPaymentId());
+            $paymentAdditionalInformation = [
+                'method_title' => 'Kredi/Banka Kartı ile Ödeme',
+                'iyzico_payment_id' => $response->getPaymentId(),
+                'iyzico_conversation_id' => $response->getConversationId(),
+            ];
 
-        $payment->setAdditionalInformation($paymentAdditionalInformation);
+            $payment->setAdditionalInformation($paymentAdditionalInformation);
 
-        $payment->setTransactionId($response->getPaymentId())
-            ->setIsTransactionClosed(0)
-            ->setTransactionAdditionalInfo(
-                Transaction::RAW_DETAILS,
-                json_encode($paymentAdditionalInformation)
-            );
+            $payment->setTransactionId($response->getPaymentId())
+                ->setIsTransactionClosed(0)
+                ->setTransactionAdditionalInfo(
+                    Transaction::RAW_DETAILS,
+                    json_encode($paymentAdditionalInformation)
+                );
+        }
 
         if ($paymentStatus == 'PENDING_CREDIT' && $status == 'success') {
             $order->setState("pending_payment")->setStatus("pending_payment");
@@ -120,7 +122,10 @@ class OrderService
             $order = $this->setOrderInstallmentFee($order, $response->getPaidPrice(), $response->getInstallment());
         }
 
-        $order->addCommentToStatusHistory("Payment ID: " . $response->getPaymentId() . " - Conversation ID:" . $response->getConversationId());
+        if(!$isWebhook){
+            $order->addCommentToStatusHistory("Payment ID: " . $response->getPaymentId() . " - Conversation ID:" . $response->getConversationId());
+        }
+
         $order->save();
     }
 
@@ -129,15 +134,18 @@ class OrderService
      *
      * This function is responsible for finding the order by id.
      *
-     * @param string $orderId
+     * @param  string  $orderId
      * @return OrderInterface|null
      */
     private function findOrderById(string $orderId): OrderInterface|null
     {
         try {
             return $this->orderRepository->get($orderId);
-        } catch (NoSuchEntityException $e) {
-            $this->errorLogger->critical("findOrderById: $orderId - Message: " . $e->getMessage(), ['fileName' => __FILE__, 'lineNumber' => __LINE__]);
+        } catch (Exception $e) {
+            $this->errorLogger->critical(
+                "findOrderById: $orderId - Message: " . $e->getMessage(),
+                ['fileName' => __FILE__, 'lineNumber' => __LINE__]
+            );
             return null;
         }
     }
@@ -152,7 +160,7 @@ class OrderService
      * @param $installment
      * @return mixed
      */
-    public function setOrderInstallmentFee($order, $paidPrice, $installment)
+    public function setOrderInstallmentFee($order, $paidPrice, $installment): mixed
     {
         $grandTotal = $order->getGrandTotal();
 

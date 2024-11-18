@@ -31,31 +31,19 @@ use Magento\Store\Model\ScopeInterface;
 
 use Iyzico\Iyzipay\Controller\IyzicoBase\IyzicoPkiStringBuilder;
 use Iyzico\Iyzipay\Controller\IyzicoBase\IyzicoRequest;
-use Iyzico\Iyzipay\Helper\IyzicoHelper;
+use Iyzico\Iyzipay\Helper\UtilityHelper;
 use stdClass;
 
 
 class IyzipayConfigSaveBefore implements ObserverInterface
 {
-
-    protected $scopeConfig;
-    protected $storeManager;
-    protected $iyzicoHelper;
-    protected $configWriter;
-    protected $request;
-
     public function __construct(
-        ScopeConfigInterface $scopeConfig,
-        StoreManagerInterface $storeManager,
-        IyzicoHelper $iyzicoHelper,
-        WriterInterface $configWriter,
-        Http $request
+        private readonly ScopeConfigInterface $scopeConfig,
+        private readonly StoreManagerInterface $storeManager,
+        private readonly UtilityHelper $utilityHelper,
+        private readonly WriterInterface $configWriter,
+        private readonly Http $request
     ) {
-        $this->scopeConfig = $scopeConfig;
-        $this->storeManager = $storeManager;
-        $this->iyzicoHelper = $iyzicoHelper;
-        $this->configWriter = $configWriter;
-        $this->request = $request;
     }
 
     public function execute(EventObserver $observer)
@@ -80,7 +68,7 @@ class IyzipayConfigSaveBefore implements ObserverInterface
             );
 
             $overlayObject = new stdClass();
-            $overlayObject->locale = $this->iyzicoHelper->cutLocale($locale);
+            $overlayObject->locale = $this->utilityHelper->cutLocale($locale);
             $overlayObject->conversationId = $randNumer;
             $overlayObject->position = $postData['groups']['iyzipay']['fields']['overlayscript']['value'];
 

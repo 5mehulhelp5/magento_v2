@@ -22,10 +22,11 @@
 
 namespace Iyzico\Iyzipay\Cron;
 
-
-use Iyzico\Iyzipay\Helper\ResponseObjectHelper;
-use Iyzico\Iyzipay\Helper\PkiStringBuilder;
-use Iyzico\Iyzipay\Helper\PkiStringBuilderFactory;
+use Exception;
+use Iyzico\Iyzipay\Helper\ConfigHelper;
+use Iyzico\Iyzipay\Library\Model\CheckoutForm;
+use Iyzico\Iyzipay\Library\Options;
+use Iyzico\Iyzipay\Library\Request\RetrieveCheckoutFormRequest;
 use Iyzico\Iyzipay\Logger\IyziCronLogger;
 use Iyzico\Iyzipay\Model\ResourceModel\IyziOrderJob\Collection;
 use Iyzico\Iyzipay\Model\ResourceModel\IyziOrderJob\CollectionFactory;
@@ -33,7 +34,6 @@ use Iyzico\Iyzipay\Model\ResourceModel\IyziOrderJob\CollectionFactory;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Sales\Api\OrderRepositoryInterface;
 use Magento\Store\Model\StoreManagerInterface;
-use Magento\Store\Model\ScopeInterface;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\Promise\Utils;
@@ -41,41 +41,23 @@ use GuzzleHttp\Promise\Utils;
 
 class ProcessPendingOrders
 {
-    protected IyziCronLogger $cronLogger;
-    protected Collection $collection;
-    protected ResponseObjectHelper $responseObjectHelper;
-    protected ScopeConfigInterface $scopeConfig;
-    protected PkiStringBuilderFactory $pkiStringBuilderFactory;
-    protected OrderRepositoryInterface $orderRepository;
-    protected StoreManagerInterface $storeManager;
-    protected CollectionFactory $collectionFactory;
-
-    protected const PAGE_SIZE = 100; // Number of records to process per batch
+    protected const PAGE_SIZE = 100;
 
     public function __construct(
-        IyziCronLogger $cronLogger,
-        Collection $collection,
-        ResponseObjectHelper $responseObjectHelper,
-        ScopeConfigInterface $scopeConfig,
-        StoreManagerInterface $storeManager,
-        PkiStringBuilderFactory $pkiStringBuilderFactory,
-        OrderRepositoryInterface $orderRepository,
-        CollectionFactory $collectionFactory
+        protected readonly IyziCronLogger $cronLogger,
+        protected readonly Collection $collection,
+        protected readonly ScopeConfigInterface $scopeConfig,
+        protected readonly StoreManagerInterface $storeManager,
+        protected readonly OrderRepositoryInterface $orderRepository,
+        protected readonly CollectionFactory $collectionFactory,
+        protected readonly ConfigHelper $configHelper
     ) {
-        $this->cronLogger = $cronLogger;
-        $this->collection = $collection;
-        $this->responseObjectHelper = $responseObjectHelper;
-        $this->scopeConfig = $scopeConfig;
-        $this->storeManager = $storeManager;
-        $this->pkiStringBuilderFactory = $pkiStringBuilderFactory;
-        $this->orderRepository = $orderRepository;
-        $this->collectionFactory = $collectionFactory;
     }
 
     public function execute()
     {
         try {
-            $this->cronLogger->info('Iyzico cron job started');
+            $this->cronLogger->info('iyzico cron job started');
 
             $page = 1;
             $processedCount = 0;
@@ -104,12 +86,12 @@ class ProcessPendingOrders
                 $this->deleteProcessedOrders($ordersToDelete);
             }
 
-            $this->cronLogger->info('Iyzico cron job completed', ['total_processed' => $processedCount]);
+            $this->cronLogger->info('iyzico cron job completed', ['total_processed' => $processedCount]);
 
             return ['success' => true, 'message' => "Processed $processedCount orders"];
 
-        } catch (\Exception $e) {
-            $this->cronLogger->error('Iyzico cron job failed: ' . $e->getMessage());
+        } catch (Exception $e) {
+            $this->cronLogger->error('iyzico cron job failed: ' . $e->getMessage());
             return ['success' => false, 'message' => $e->getMessage()];
         }
     }
@@ -140,14 +122,14 @@ class ProcessPendingOrders
         foreach ($orders as $order) {
             $token = $order->getIyzicoPaymentToken();
             $conversationId = $order->getIyzicoConversationId();
-            $promises[$order->getId()] = $this->getPaymentDetailAsync($client, $token, $conversationId);
+            $promises[$order->getId()] = $this->getPaymentDetailAsync($ $token, $conversationId);
         }
 
         $responses = Utils::settle($promises)->wait();
 
         foreach ($orders as $order) {
             $response = $responses[$order->getId()]['value'];
-            $responseBody = json_decode($response->getBody());
+            $responseBody = json_decode($response->getRawResult());
 
             $conversationId = $order->getIyzicoConversationId();
             $responseConversationId = $responseBody->conversationId ?? '0';
@@ -200,8 +182,8 @@ class ProcessPendingOrders
 
     private function updateOrder($order, $responseBody)
     {
-        $paymentStatus = $responseBody->paymentStatus ?? '';
-        $status = $responseBody->status ?? '';
+        $paymentStatus = $responseBody->getPaymentStatus() ?? '';
+        $status = $responseBody->getStatus() ?? '';
 
         $mapping = $this->mapping($paymentStatus, $status);
 
@@ -274,77 +256,27 @@ class ProcessPendingOrders
      *
      * This function is responsible for retrieving the payment detail asynchronously.
      *
-     * @param Client $client
      * @param string $token
      * @param string $conversationId
-     * @return \GuzzleHttp\Promise\PromiseInterface
      */
-    private function getPaymentDetailAsync(Client $client, string $token, string $conversationId)
+    private function getPaymentDetailAsync(string $token, string $conversationId)
     {
-        $definition = $this->getPaymentDefinition();
-        $pkiStringBuilder = $this->getPkiStringBuilder();
+        $locale = $this->configHelper->getLocale();
 
-        $tokenDetailObject = $this->responseObjectHelper->createTokenDetailObject($conversationId, $token);
-        $iyzicoPkiString = $pkiStringBuilder->generatePkiString($tokenDetailObject);
-        $authorization = $pkiStringBuilder->generateAuthorization($iyzicoPkiString, $definition['apiKey'], $definition['secretKey'], $definition['rand']);
-        $iyzicoJson = json_encode($tokenDetailObject, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $request = new RetrieveCheckoutFormRequest();
+        $request->setLocale($locale);
+        $request->setConversationId($conversationId);
+        $request->setToken($token);
 
-        $url = $definition['baseUrl'] . '/payment/iyzipos/checkoutform/auth/ecom/detail';
+        $options = new Options();
+        $options->setBaseUrl($this->configHelper->getBaseUrl());
+        $options->setApiKey($this->configHelper->getApiKey());
+        $options->setSecretKey($this->configHelper->getSecretKey());
 
-        return $client->postAsync($url, [
-            'body' => $iyzicoJson,
-            'headers' => [
-                'Authorization' => $authorization['authorization'],
-                'x-iyzi-rnd' => $authorization['rand_value'],
-                'Content-Type' => 'application/json',
-            ],
-        ]);
+        $response = CheckoutForm::retrieve($request, $options);
+
+        return $response;
     }
-
-
-    /**
-     * Get Payment Definition
-     *
-     * This function is responsible for getting the payment definition.
-     *
-     * @return array
-     */
-    private function getPaymentDefinition()
-    {
-        $websiteId = $this->storeManager->getWebsite()->getId();
-
-        return [
-            'rand' => uniqid(),
-            'baseUrl' => $this->scopeConfig->getValue(
-                'payment/iyzipay/sandbox',
-                ScopeInterface::SCOPE_WEBSITES,
-                $websiteId
-            ) ? 'https://sandbox-api.iyzipay.com' : 'https://api.iyzipay.com',
-            'apiKey' => $this->scopeConfig->getValue(
-                'payment/iyzipay/api_key',
-                ScopeInterface::SCOPE_WEBSITES,
-                $websiteId
-            ),
-            'secretKey' => $this->scopeConfig->getValue(
-                'payment/iyzipay/secret_key',
-                ScopeInterface::SCOPE_WEBSITES,
-                $websiteId
-            )
-        ];
-    }
-
-    /**
-     * Get Pki String Builder
-     *
-     * This function is responsible for getting the pki string builder.
-     *
-     * @return PkiStringBuilder
-     */
-    private function getPkiStringBuilder(): PkiStringBuilder
-    {
-        return $this->pkiStringBuilderFactory->create();
-    }
-
 
     /**
      * Summary of getTotalPages

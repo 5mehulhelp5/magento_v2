@@ -105,7 +105,7 @@ class ConfigHelper
      */
     public function getCallbackUrl(): string
     {
-        return $this->storeManager->getStore()->getBaseUrl() . "Iyzico_Iyzipay/response/iyzipayresponse";
+        return $this->storeManager->getStore()->getBaseUrl() . "iyzico/response/iyzipayresponse";
     }
 
     /**
@@ -162,7 +162,7 @@ class ConfigHelper
      */
     public function getPaymentSource(): string
     {
-        return "MAGENTO2|" . $this->getMagentoVersion() . "|SPACE-2.1.1";
+        return "MAGENTO2|" . $this->getMagentoVersion() . "|SPACE-2.1.2";
     }
 
     /**

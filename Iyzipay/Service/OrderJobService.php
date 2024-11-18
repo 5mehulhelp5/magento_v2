@@ -3,7 +3,6 @@
 namespace Iyzico\Iyzipay\Service;
 
 use Exception;
-use Iyzico\Iyzipay\Library\Model\CheckoutFormInitialize;
 use Iyzico\Iyzipay\Logger\IyziErrorLogger;
 use Iyzico\Iyzipay\Model\IyziOrderJobFactory;
 use Iyzico\Iyzipay\Model\ResourceModel\IyziOrderJob as IyziOrderJobResource;
@@ -48,7 +47,7 @@ class OrderJobService
                 $this->iyziOrderJobResource->save($iyzicoOrderJob);
             }
         } catch (Throwable $th) {
-            $this->errorLogger->critical("setOrderJobStatus: " . $th->getMessage(), [
+            $this->errorLogger->critical("setOrderJobStatus: ".$th->getMessage(), [
                 'fileName' => __FILE__,
                 'lineNumber' => __LINE__,
             ]);
@@ -61,7 +60,7 @@ class OrderJobService
      * This function is responsible for saving the iyzi order job.
      *
      * @param  string  $orderId
-     * @param  string  $paymentId
+     * @param  string  $quoteId
      * @return void
      */
     public function assignOrderIdToIyzicoOrderJob(string $orderId, string $quoteId): void
@@ -72,7 +71,7 @@ class OrderJobService
             $iyzicoOrderJob->setOrderId($orderId);
             $this->iyziOrderJobResource->save($iyzicoOrderJob);
         } catch (Throwable $th) {
-            $this->errorLogger->critical("assignOrderIdToIyzicoOrderJob: " . $th->getMessage(), [
+            $this->errorLogger->critical("assignOrderIdToIyzicoOrderJob: ".$th->getMessage(), [
                 'fileName' => __FILE__,
                 'lineNumber' => __LINE__,
             ]);
@@ -100,11 +99,11 @@ class OrderJobService
      *
      * This function is responsible for saving the iyzi order table.
      *
-     * @param  CheckoutFormInitialize  $response
+     * @param  $response
      * @param  int  $quoteId
      * @param  int|null  $orderId
      */
-    public function saveIyziOrderJobTable(CheckoutFormInitialize $response, int $quoteId, int|null $orderId): void
+    public function saveIyziOrderJobTable($response, int $quoteId, int|null $orderId): void
     {
         try {
             $iyzicoOrderJob = $this->iyziOrderJobFactory->create();
