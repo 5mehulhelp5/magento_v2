@@ -108,6 +108,7 @@ class IyzipayResponse implements HttpPostActionInterface, CsrfAwareActionInterfa
             $token = $this->request->getParam('token');
             $locale = $this->configHelper->getLocale();
 
+            $orderId = $this->orderJobService->findParametersByToken($token, 'order_id');
             $quoteId = $this->orderJobService->findParametersByToken($token, 'quote_id');
             $conversationId = $this->orderJobService->findParametersByToken($token, 'iyzico_conversation_id');
 
@@ -116,8 +117,15 @@ class IyzipayResponse implements HttpPostActionInterface, CsrfAwareActionInterfa
             $baseUrl = $this->configHelper->getBaseUrl();
 
             $quote = $this->findQuoteById($quoteId);
+            $order = $this->orderService->findOrderById($orderId);
 
             if ($quote == null) {
+                $this->messageManager->addErrorMessage(__('An error occurred while processing your payment. Please try again.'));
+                $resultRedirect = $this->resultFactory->create(ResultFactory::TYPE_REDIRECT);
+                return $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
+            }
+
+            if ($order == null) {
                 $this->messageManager->addErrorMessage(__('An error occurred while processing your payment. Please try again.'));
                 $resultRedirect = $this->resultFactory->create(ResultFactory::TYPE_REDIRECT);
                 return $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
@@ -164,10 +172,6 @@ class IyzipayResponse implements HttpPostActionInterface, CsrfAwareActionInterfa
 
             switch ($response->getStatus()) {
                 case 'success':
-                    $order = $this->orderService->placeOrder($quoteId, $this->customerSession, $this->cartManagement);
-                    $orderId = $order->getId();
-
-                    $this->orderJobService->assignOrderIdToIyzicoOrderJob($orderId, $quoteId);
                     $this->orderService->updateOrderPaymentStatus($orderId, $response);
 
                     $customerId = $this->utilityHelper->getCustomerId($this->customerSession);

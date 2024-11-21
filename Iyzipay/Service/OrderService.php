@@ -41,7 +41,7 @@ class OrderService
         int $quoteId,
         CustomerSession $customerSession,
         CartManagementInterface $cartManagement
-    ): OrderInterface {
+    ): int {
         $quote = $this->quoteRepository->get($quoteId);
         if ($customerSession->isLoggedIn()) {
             $orderId = $cartManagement->placeOrder($quoteId);
@@ -50,6 +50,9 @@ class OrderService
             $quote->setCustomerEmail($customerSession->getEmail());
             $orderId = $cartManagement->placeOrder($quoteId);
         }
+
+        $quote->setIsActive(1);
+        $this->quoteResource->save($quote);
 
         $order = $this->orderRepository->get($orderId);
         $comment = __("START_ORDER");
@@ -60,7 +63,7 @@ class OrderService
 
         $this->orderRepository->save($order);
 
-        return $order;
+        return $orderId;
     }
 
     /**
@@ -137,7 +140,7 @@ class OrderService
      * @param  string  $orderId
      * @return OrderInterface|null
      */
-    private function findOrderById(string $orderId): OrderInterface|null
+    public function findOrderById(string $orderId): OrderInterface|null
     {
         try {
             return $this->orderRepository->get($orderId);

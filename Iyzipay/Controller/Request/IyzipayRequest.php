@@ -39,6 +39,7 @@ use Magento\Framework\Controller\Result\JsonFactory;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\Exception\NoSuchEntityException;
 use Magento\Quote\Api\CartManagementInterface;
+use Magento\Quote\Api\CartRepositoryInterface;
 use Magento\Quote\Model\Quote;
 
 
@@ -56,7 +57,8 @@ class IyzipayRequest implements ActionInterface
         protected readonly ObjectHelper $objectHelper,
         protected readonly OrderJobService $orderJobService,
         protected readonly OrderService $orderService,
-        protected readonly CartManagementInterface $cartManagement
+        protected readonly CartManagementInterface $cartManagement,
+        protected readonly CartRepositoryInterface $cartRepository
     ) {
     }
 
@@ -138,8 +140,8 @@ class IyzipayRequest implements ActionInterface
 
         if ($responseSignature === $calculateSignature) {
             $this->utilityHelper->storeSessionData($checkoutSession, $this->customerSession);
-            $order = $this->orderService->placeOrder($basketId, $this->customerSession, $this->cartManagement);
-            $this->orderJobService->saveIyziOrderJobTable($response, $basketId, $order->getId());
+            $orderId = $this->orderService->placeOrder($basketId, $this->customerSession, $this->cartManagement);
+            $this->orderJobService->saveIyziOrderJobTable($response, $basketId, $orderId);
             return $resultJson->setData([
                 'success' => true,
                 'url' => $response->getPaymentPageUrl()
