@@ -23,6 +23,8 @@
 namespace Iyzico\Iyzipay\Cron;
 
 use Exception;
+use GuzzleHttp\Client;
+use GuzzleHttp\Promise\Utils;
 use Iyzico\Iyzipay\Helper\ConfigHelper;
 use Iyzico\Iyzipay\Library\Model\CheckoutForm;
 use Iyzico\Iyzipay\Library\Options;
@@ -30,13 +32,10 @@ use Iyzico\Iyzipay\Library\Request\RetrieveCheckoutFormRequest;
 use Iyzico\Iyzipay\Logger\IyziCronLogger;
 use Iyzico\Iyzipay\Model\ResourceModel\IyziOrderJob\Collection;
 use Iyzico\Iyzipay\Model\ResourceModel\IyziOrderJob\CollectionFactory;
-
 use Magento\Framework\App\Config\ScopeConfigInterface;
+use Magento\Framework\Exception\LocalizedException;
 use Magento\Sales\Api\OrderRepositoryInterface;
 use Magento\Store\Model\StoreManagerInterface;
-
-use GuzzleHttp\Client;
-use GuzzleHttp\Promise\Utils;
 
 
 class ProcessPendingOrders
@@ -96,7 +95,21 @@ class ProcessPendingOrders
         }
     }
 
-    private function getPageOfOrders($page)
+    /**
+     * Summary of getTotalPages
+     * @return float
+     */
+    private function getTotalPages(): float
+    {
+        $totalItems = $this->collection
+            ->addFieldToFilter('status', ['in' => ['pending_payment', 'received']])
+            ->addFieldToFilter('is_controlled', ['eq' => 0])
+            ->getSize();
+
+        return ceil($totalItems / self::PAGE_SIZE);
+    }
+
+    private function getPageOfOrders($page): array
     {
         $this->cronLogger->info('Fetching orders', ['page' => $page]);
 
@@ -109,7 +122,7 @@ class ProcessPendingOrders
         return $this->collection->getItems();
     }
 
-    private function processOrders($orders, &$ordersToDelete)
+    private function processOrders($orders, &$ordersToDelete): void
     {
 
         $this->cronLogger->info('Processing orders', ['count' => count($orders)]);
@@ -148,25 +161,36 @@ class ProcessPendingOrders
         }
     }
 
-    private function updateLastControlDate($order)
+    /**
+     * Retrieve Payment Detail Asynchronously
+     *
+     * This function is responsible for retrieving the payment detail asynchronously.
+     *
+     * @param  string  $token
+     * @param  string  $conversationId
+     * @return CheckoutForm
+     * @throws LocalizedException
+     */
+    private function getPaymentDetailAsync(string $token, string $conversationId): CheckoutForm
     {
-        $this->cronLogger->info('Updating last control date', ['order_id' => $order->getOrderId()]);
+        $locale = $this->configHelper->getLocale();
 
-        $oldLastControlledAt = $order->getLastControlledAt();
-        $newLastControlledAt = date('Y-m-d H:i:s');
+        $request = new RetrieveCheckoutFormRequest();
+        $request->setLocale($locale);
+        $request->setConversationId($conversationId);
+        $request->setToken($token);
 
-        $order->setLastControlledAt($newLastControlledAt);
+        $options = new Options();
+        $options->setBaseUrl($this->configHelper->getBaseUrl());
+        $options->setApiKey($this->configHelper->getApiKey());
+        $options->setSecretKey($this->configHelper->getSecretKey());
 
-        $this->cronLogger->info('Last control date updated', [
-            'order_id' => $order->getOrderId(),
-            'old_last_control_date' => $oldLastControlledAt,
-            'new_last_control_date' => $newLastControlledAt
-        ]);
+        $response = CheckoutForm::retrieve($request, $options);
 
-        return $order;
+        return $response;
     }
 
-    private function validateConversationId(string $conversationId, string $responseConversationId)
+    private function validateConversationId(string $conversationId, string $responseConversationId): bool
     {
         if ($conversationId !== $responseConversationId) {
             $this->cronLogger->error('Conversation ID does not match', [
@@ -180,7 +204,7 @@ class ProcessPendingOrders
         return true;
     }
 
-    private function updateOrder($order, $responseBody)
+    private function updateOrder($order, $responseBody): mixed
     {
         $paymentStatus = $responseBody->getPaymentStatus() ?? '';
         $status = $responseBody->getStatus() ?? '';
@@ -216,21 +240,6 @@ class ProcessPendingOrders
         return $order;
     }
 
-    private function deleteProcessedOrders($orderIds)
-    {
-        if (empty($orderIds)) {
-            return;
-        }
-
-        $collection = $this->collectionFactory->create();
-        $collection->addFieldToFilter('id', ['in' => $orderIds]);
-
-        $deletedCount = $collection->getSize();
-        $collection->walk('delete');
-
-        $this->cronLogger->info("Bulk delete completed", ['deleted_count' => $deletedCount]);
-    }
-
     private function mapping(string $paymentStatus, string $status): array
     {
         if ($status == "failure")
@@ -251,45 +260,37 @@ class ProcessPendingOrders
         return [];
     }
 
-    /**
-     * Retrieve Payment Detail Asynchronously
-     *
-     * This function is responsible for retrieving the payment detail asynchronously.
-     *
-     * @param string $token
-     * @param string $conversationId
-     */
-    private function getPaymentDetailAsync(string $token, string $conversationId)
+    private function updateLastControlDate($order)
     {
-        $locale = $this->configHelper->getLocale();
+        $this->cronLogger->info('Updating last control date', ['order_id' => $order->getOrderId()]);
 
-        $request = new RetrieveCheckoutFormRequest();
-        $request->setLocale($locale);
-        $request->setConversationId($conversationId);
-        $request->setToken($token);
+        $oldLastControlledAt = $order->getLastControlledAt();
+        $newLastControlledAt = date('Y-m-d H:i:s');
 
-        $options = new Options();
-        $options->setBaseUrl($this->configHelper->getBaseUrl());
-        $options->setApiKey($this->configHelper->getApiKey());
-        $options->setSecretKey($this->configHelper->getSecretKey());
+        $order->setLastControlledAt($newLastControlledAt);
 
-        $response = CheckoutForm::retrieve($request, $options);
+        $this->cronLogger->info('Last control date updated', [
+            'order_id' => $order->getOrderId(),
+            'old_last_control_date' => $oldLastControlledAt,
+            'new_last_control_date' => $newLastControlledAt
+        ]);
 
-        return $response;
+        return $order;
     }
 
-    /**
-     * Summary of getTotalPages
-     * @return float
-     */
-    private function getTotalPages()
+    private function deleteProcessedOrders($orderIds): void
     {
-        $totalItems = $this->collection
-            ->addFieldToFilter('status', ['in' => ['pending_payment', 'received']])
-            ->addFieldToFilter('is_controlled', ['eq' => 0])
-            ->getSize();
+        if (empty($orderIds)) {
+            return;
+        }
 
-        return ceil($totalItems / self::PAGE_SIZE);
+        $collection = $this->collectionFactory->create();
+        $collection->addFieldToFilter('id', ['in' => $orderIds]);
+
+        $deletedCount = $collection->getSize();
+        $collection->walk('delete');
+
+        $this->cronLogger->info("Bulk delete completed", ['deleted_count' => $deletedCount]);
     }
 
 }

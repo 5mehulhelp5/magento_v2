@@ -130,7 +130,6 @@ class Webhook implements WebhookInterface
             throw new LocalizedException(__('iyziPaymentId is missing or empty'));
         }
 
-
         $webhookData->setPaymentConversationId(strip_tags((string) $paymentConversationId));
         $webhookData->setMerchantId((int) $merchantId);
         $webhookData->setToken(strip_tags((string) $token));

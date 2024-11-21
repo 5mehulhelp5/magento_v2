@@ -122,7 +122,7 @@ class OrderService
             $order = $this->setOrderInstallmentFee($order, $response->getPaidPrice(), $response->getInstallment());
         }
 
-        if(!$isWebhook){
+        if (!$isWebhook) {
             $order->addCommentToStatusHistory("Payment ID: " . $response->getPaymentId() . " - Conversation ID:" . $response->getConversationId());
         }
 

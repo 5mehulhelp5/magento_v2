@@ -39,32 +39,32 @@ use Magento\Framework\App\CsrfAwareActionInterface;
 use Magento\Framework\App\Request\InvalidRequestException;
 use Magento\Framework\App\RequestInterface;
 use Magento\Framework\Controller\ResultFactory;
+use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\Exception\NoSuchEntityException;
 use Magento\Framework\Message\ManagerInterface;
+use Magento\Quote\Api\CartManagementInterface;
 use Magento\Quote\Api\CartRepositoryInterface;
 use Magento\Quote\Api\Data\CartInterface;
 use Magento\Quote\Model\Quote;
 use Magento\Quote\Model\ResourceModel\Quote as QuoteResource;
-use Magento\Framework\Exception\LocalizedException;
-use Magento\Quote\Api\CartManagementInterface;
 
 class IyzipayResponse implements HttpPostActionInterface, CsrfAwareActionInterface
 {
     public function __construct(
-        private readonly RequestInterface $request,
-        private readonly CheckoutSession $checkoutSession,
-        private readonly CustomerSession $customerSession,
-        private readonly ManagerInterface $messageManager,
-        private readonly IyziErrorLogger $errorLogger,
-        private readonly CartRepositoryInterface $quoteRepository,
-        private readonly ResultFactory $resultFactory,
-        private readonly ConfigHelper $configHelper,
-        private readonly OrderJobService $orderJobService,
-        private readonly OrderService $orderService,
-        private readonly CardService $cardService,
-        private readonly UtilityHelper $utilityHelper,
-        private readonly QuoteResource $quoteResource,
-        private readonly CartManagementInterface $cartManagement,
+        protected readonly RequestInterface $request,
+        protected readonly CheckoutSession $checkoutSession,
+        protected readonly CustomerSession $customerSession,
+        protected readonly ManagerInterface $messageManager,
+        protected readonly IyziErrorLogger $errorLogger,
+        protected readonly CartRepositoryInterface $quoteRepository,
+        protected readonly ResultFactory $resultFactory,
+        protected readonly ConfigHelper $configHelper,
+        protected readonly OrderJobService $orderJobService,
+        protected readonly OrderService $orderService,
+        protected readonly CardService $cardService,
+        protected readonly UtilityHelper $utilityHelper,
+        protected readonly QuoteResource $quoteResource,
+        protected readonly CartManagementInterface $cartManagement,
     ) {
     }
 
@@ -135,10 +135,10 @@ class IyzipayResponse implements HttpPostActionInterface, CsrfAwareActionInterfa
 
             $response = CheckoutForm::retrieve($request, $options);
 
-                    $responsePaymentStatus = $response->getPaymentStatus();
-                    $responsePaymentId = $response->getPaymentId();
-                    $responseCurrency = $response->getCurrency();
-                    $responseBasketId = $response->getBasketId();
+            $responsePaymentStatus = $response->getPaymentStatus();
+            $responsePaymentId = $response->getPaymentId();
+            $responseCurrency = $response->getCurrency();
+            $responseBasketId = $response->getBasketId();
             $responseConversationId = $response->getConversationId();
             $responsePaidPrice = $response->getPaidPrice();
             $responsePrice = $response->getPrice();
@@ -198,7 +198,6 @@ class IyzipayResponse implements HttpPostActionInterface, CsrfAwareActionInterfa
                     $resultRedirect = $this->resultFactory->create(ResultFactory::TYPE_REDIRECT);
                     return $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
             }
-
         } catch (Exception $e) {
             $this->errorLogger->critical(
                 "execute error: " . $e->getMessage(),

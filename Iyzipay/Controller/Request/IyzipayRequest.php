@@ -30,6 +30,7 @@ use Iyzico\Iyzipay\Library\Options;
 use Iyzico\Iyzipay\Library\Request\CreateCheckoutFormInitializeRequest;
 use Iyzico\Iyzipay\Model\IyziCardFactory;
 use Iyzico\Iyzipay\Service\OrderJobService;
+use Iyzico\Iyzipay\Service\OrderService;
 use Magento\Checkout\Model\Session as CheckoutSession;
 use Magento\Customer\Model\Session as CustomerSession;
 use Magento\Framework\App\ActionInterface;
@@ -37,6 +38,7 @@ use Magento\Framework\Controller\Result\Json;
 use Magento\Framework\Controller\Result\JsonFactory;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\Exception\NoSuchEntityException;
+use Magento\Quote\Api\CartManagementInterface;
 use Magento\Quote\Model\Quote;
 
 
@@ -52,7 +54,9 @@ class IyzipayRequest implements ActionInterface
         protected readonly ConfigHelper $configHelper,
         protected readonly UtilityHelper $utilityHelper,
         protected readonly ObjectHelper $objectHelper,
-        protected readonly OrderJobService $orderJobService
+        protected readonly OrderJobService $orderJobService,
+        protected readonly OrderService $orderService,
+        protected readonly CartManagementInterface $cartManagement
     ) {
     }
 
@@ -134,7 +138,8 @@ class IyzipayRequest implements ActionInterface
 
         if ($responseSignature === $calculateSignature) {
             $this->utilityHelper->storeSessionData($checkoutSession, $this->customerSession);
-            $this->orderJobService->saveIyziOrderJobTable($response, $basketId, null);
+            $order = $this->orderService->placeOrder($basketId, $this->customerSession, $this->cartManagement);
+            $this->orderJobService->saveIyziOrderJobTable($response, $basketId, $order->getId());
             return $resultJson->setData([
                 'success' => true,
                 'url' => $response->getPaymentPageUrl()
