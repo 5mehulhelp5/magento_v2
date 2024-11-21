@@ -162,7 +162,7 @@ class ConfigHelper
      */
     public function getPaymentSource(): string
     {
-        return "MAGENTO2|" . $this->getMagentoVersion() . "|SPACE-2.1.2";
+        return "MAGENTO2|" . $this->getMagentoVersion() . "|SPACE-2.1.3";
     }
 
     /**
