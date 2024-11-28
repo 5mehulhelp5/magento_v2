@@ -4,6 +4,7 @@ namespace Iyzico\Iyzipay\Library\Model;
 
 use Iyzico\Iyzipay\Library\IyzipayResource;
 use Iyzico\Iyzipay\Library\Model\Mapper\ProtectedOverleyScriptMapper;
+use Iyzico\Iyzipay\Library\Options;
 use Iyzico\Iyzipay\Library\Request\RetrieveProtectedOverleyScriptRequest;
 
 class ProtectedOverleyScript extends IyzipayResource
