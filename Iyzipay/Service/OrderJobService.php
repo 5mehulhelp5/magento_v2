@@ -47,7 +47,7 @@ class OrderJobService
                 $this->iyziOrderJobResource->save($iyzicoOrderJob);
             }
         } catch (Throwable $th) {
-            $this->errorLogger->critical("setOrderJobStatus: ".$th->getMessage(), [
+            $this->errorLogger->critical("setOrderJobStatus: " . $th->getMessage(), [
                 'fileName' => __FILE__,
                 'lineNumber' => __LINE__,
             ]);
@@ -71,7 +71,7 @@ class OrderJobService
             $iyzicoOrderJob->setOrderId($orderId);
             $this->iyziOrderJobResource->save($iyzicoOrderJob);
         } catch (Throwable $th) {
-            $this->errorLogger->critical("assignOrderIdToIyzicoOrderJob: ".$th->getMessage(), [
+            $this->errorLogger->critical("assignOrderIdToIyzicoOrderJob: " . $th->getMessage(), [
                 'fileName' => __FILE__,
                 'lineNumber' => __LINE__,
             ]);
@@ -92,6 +92,21 @@ class OrderJobService
         $iyzicoOrderJob = $this->iyziOrderJobFactory->create();
         $this->iyziOrderJobResource->load($iyzicoOrderJob, $token, 'iyzico_payment_token');
         return $iyzicoOrderJob->getData($find);
+    }
+
+    /**
+     * Find OrderId By QuoteId
+     *
+     * This function is responsible for finding the order id by quote id.
+     *
+     * @param  int  $quoteId
+     * @return mixed
+     */
+    public function findOrderIdByQuoteId(int $quoteId): mixed
+    {
+        $iyzicoOrderJob = $this->iyziOrderJobFactory->create();
+        $this->iyziOrderJobResource->load($iyzicoOrderJob, $quoteId, 'quote_id');
+        return $iyzicoOrderJob->getOrderId();
     }
 
     /**

@@ -6,6 +6,7 @@ use Exception;
 use Iyzico\Iyzipay\Helper\UtilityHelper;
 use Iyzico\Iyzipay\Logger\IyziErrorLogger;
 use Magento\Customer\Model\Session as CustomerSession;
+use Magento\Framework\Exception\AlreadyExistsException;
 use Magento\Framework\Exception\CouldNotSaveException;
 use Magento\Framework\Exception\NoSuchEntityException;
 use Magento\Quote\Api\CartManagementInterface;
@@ -35,7 +36,7 @@ class OrderService
      *
      * This function is responsible for placing the order and setting the status to pending_payment.
      *
-     * @throws CouldNotSaveException|NoSuchEntityException
+     * @throws CouldNotSaveException|NoSuchEntityException|AlreadyExistsException
      */
     public function placeOrder(
         int $quoteId,
@@ -60,6 +61,7 @@ class OrderService
         $order->setState('pending_payment')->setStatus('pending_payment');
         $order->addCommentToStatusHistory($comment);
         $order->getPayment()->setMethod('iyzipay');
+        $order->setCanSendNewEmailFlag(false);
 
         $this->orderRepository->save($order);
 
@@ -73,11 +75,11 @@ class OrderService
      *
      * @param  string  $orderId
      * @param  $response
-     *
+     * @param  bool  $isWebhook
      * @return void
      * @throws Exception
      */
-    public function updateOrderPaymentStatus(string $orderId, $response, $isWebhook = false): void
+    public function updateOrderPaymentStatus(string $orderId, $response, bool $isWebhook = false): void
     {
         $order = $this->findOrderById($orderId);
         $payment = $order->getPayment();
@@ -129,7 +131,8 @@ class OrderService
             $order->addCommentToStatusHistory("Payment ID: " . $response->getPaymentId() . " - Conversation ID:" . $response->getConversationId());
         }
 
-        $order->save();
+        $order->setCanSendNewEmailFlag(true);
+        $this->orderRepository->save($order);
     }
 
     /**
@@ -173,5 +176,19 @@ class OrderService
         $order->setInstallmentCount($installment);
 
         return $order;
+    }
+
+    /**
+     * Cancel Order
+     *
+     * @param string $orderId
+     * @return void
+     */
+    public function cancelOrder(string $orderId): void
+    {
+        $order = $this->findOrderById($orderId);
+        $order->setState("canceled")->setStatus("canceled");
+        $order->addCommentToStatusHistory(__("Order has been canceled."));
+        $this->orderRepository->save($order);
     }
 }

@@ -25,6 +25,7 @@ class CreateCheckoutFormInitializeRequest extends Request
     private $enabledInstallments;
     private $debitCardAllowed;
     private $shippingAmountExcluded;
+    private $goBackUrl;
 
     public function getJsonObject()
     {
@@ -46,6 +47,7 @@ class CreateCheckoutFormInitializeRequest extends Request
             ->addArray("enabledInstallments", $this->getEnabledInstallments())
             ->add("debitCardAllowed", $this->getDebitCardAllowed())
             ->add("shippingAmountExcluded", $this->getShippingAmountExcluded())
+            ->add("goBackUrl", $this->getGoBackUrl())
             ->getObject();
     }
 
@@ -217,6 +219,16 @@ class CreateCheckoutFormInitializeRequest extends Request
     public function setShippingAmountExcluded($shippingAmountExcluded)
     {
         $this->shippingAmountExcluded = $shippingAmountExcluded;
+    }
+
+    public function getGoBackUrl()
+    {
+        return $this->goBackUrl;
+    }
+
+    public function setGoBackUrl($goBackUrl)
+    {
+        $this->goBackUrl = $goBackUrl;
     }
 
     public function toPKIRequestString()

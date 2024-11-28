@@ -103,7 +103,6 @@ class ProcessPendingOrders
     {
         $totalItems = $this->collection
             ->addFieldToFilter('status', ['in' => ['pending_payment', 'received']])
-            ->addFieldToFilter('is_controlled', ['eq' => 0])
             ->getSize();
 
         return ceil($totalItems / self::PAGE_SIZE);
@@ -115,7 +114,6 @@ class ProcessPendingOrders
 
         $this->collection
             ->addFieldToFilter('status', ['in' => ['pending_payment', 'received']])
-            ->addFieldToFilter('is_controlled', ['eq' => 0])
             ->setPageSize(self::PAGE_SIZE)
             ->setCurPage($page);
 

@@ -7,8 +7,6 @@
     <column xsi:type="varchar" name="iyzico_payment_token" nullable="false" length="255" comment="iyzico Payment Token"/>
     <column xsi:type="varchar" name="iyzico_conversation_id" nullable="false" length="255" comment="iyzico Payment Conversation Id"/>
     <column xsi:type="varchar" name="status" nullable="false" length="255" comment="Status"/>
-    <column xsi:type="boolean" name="is_controlled" nullable="false" comment="Is Controlled"/>
-    <column xsi:type="timestamp" name="last_controlled_at" on_update="false" nullable="true" comment="Last Controller At"/>
     <constraint xsi:type="primary" referenceId="PRIMARY">
       <column name="id"/>
     </constraint>
@@ -18,6 +16,9 @@
     </index>
     <index referenceId="MAGE_IYZICO_ORDER_JOB_IYZICO_CONVERSATIONID" indexType="btree">
       <column name="iyzico_conversation_id"/>
+    </index>
+    <index referenceId="MAGE_IYZICO_ORDER_JOB_STATUS" indexType="btree">
+      <column name="status"/>
     </index>
   </table>
   <table name="iyzico_card" resource="default" engine="innodb" comment="iyzico Card">

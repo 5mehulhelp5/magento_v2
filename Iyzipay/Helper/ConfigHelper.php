@@ -69,6 +69,37 @@ class ConfigHelper
     }
 
     /**
+     * Get Webhook Url Key Active
+     *
+     * @return mixed
+     * @throws LocalizedException
+     */
+    public function getWebhookUrlKeyActive(): mixed
+    {
+        return $this->scopeConfig->getValue(
+            'payment/iyzipay/webhook_url_key_active',
+            $this->getScopeInterface(),
+            $this->getWebsiteId()
+        );
+    }
+
+
+    /**
+     * Get Sandbox Status
+     *
+     * @return mixed
+     * @throws LocalizedException
+     */
+    public function getSandboxStatus(): mixed
+    {
+        return $this->scopeConfig->getValue(
+            'payment/iyzipay/sandbox',
+            $this->getScopeInterface(),
+            $this->getWebsiteId()
+        );
+    }
+
+    /**
      * Get Api Key
      *
      * @return mixed
@@ -105,7 +136,7 @@ class ConfigHelper
      */
     public function getCallbackUrl(): string
     {
-        return $this->storeManager->getStore()->getBaseUrl() . "iyzico/response/iyzipayresponse";
+        return $this->storeManager->getStore()->getBaseUrl()."iyzico/response/iyzipayresponse";
     }
 
     /**
@@ -121,6 +152,18 @@ class ConfigHelper
             $this->getScopeInterface(),
             $this->getWebsiteId()
         ) ? 'https://sandbox-api.iyzipay.com' : 'https://api.iyzipay.com';
+    }
+
+    /**
+     * Get GoBack Url
+     *
+     * This function is responsible for getting the go back url.
+     *
+     * @throws NoSuchEntityException
+     */
+    public function getGoBackUrl(): string
+    {
+        return $this->storeManager->getStore()->getBaseUrl()."checkout/cart";
     }
 
     /**
@@ -162,7 +205,7 @@ class ConfigHelper
      */
     public function getPaymentSource(): string
     {
-        return "MAGENTO2|" . $this->getMagentoVersion() . "|SPACE-2.1.3";
+        return "MAGENTO2|".$this->getMagentoVersion()."|SPACE-2.1.3";
     }
 
     /**

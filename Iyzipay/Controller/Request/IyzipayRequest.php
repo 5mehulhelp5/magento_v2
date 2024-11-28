@@ -120,6 +120,7 @@ class IyzipayRequest implements ActionInterface
         $request->setBillingAddress($billingAddress);
         $request->setBasketItems($basketItems);
         $request->setCardUserKey($cardUserKey);
+        $request->setGoBackUrl($this->configHelper->getGoBackUrl());
 
         // Create the options
         $options = new Options();
@@ -140,6 +141,13 @@ class IyzipayRequest implements ActionInterface
 
         if ($responseSignature === $calculateSignature) {
             $this->utilityHelper->storeSessionData($checkoutSession, $this->customerSession);
+
+            $oldOrderId = $this->orderJobService->findOrderIdByQuoteId($basketId);
+
+            if ($oldOrderId) {
+                $this->orderService->cancelOrder($oldOrderId);
+            }
+
             $orderId = $this->orderService->placeOrder($basketId, $this->customerSession, $this->cartManagement);
             $this->orderJobService->saveIyziOrderJobTable($response, $basketId, $orderId);
             return $resultJson->setData([

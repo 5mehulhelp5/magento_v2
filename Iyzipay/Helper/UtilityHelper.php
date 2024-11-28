@@ -3,8 +3,8 @@
 namespace Iyzico\Iyzipay\Helper;
 
 use Iyzico\Iyzipay\Model\IyziCardFactory;
-use Magento\Quote\Model\Quote;
 use Magento\Customer\Model\Session as CustomerSession;
+use Magento\Quote\Model\Quote;
 
 class UtilityHelper
 {
@@ -169,11 +169,6 @@ class UtilityHelper
     public function generateConversationId(int $quoteId): string
     {
         return 'QI' . $quoteId . 'T' . time();
-    }
-
-    public function generateRandomString(): string
-    {
-        return uniqid();
     }
 
     /**
