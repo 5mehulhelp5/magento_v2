@@ -94,7 +94,7 @@ class OrderService
         if (!$isWebhook) {
             $payment->setLastTransId($response->getPaymentId());
             $paymentAdditionalInformation = [
-                'method_title' => 'Kredi/Banka Kartı ile Ödeme',
+                'method_title' => 'iyzipay',
                 'iyzico_payment_id' => $response->getPaymentId(),
                 'iyzico_conversation_id' => $response->getConversationId(),
             ];
@@ -108,7 +108,7 @@ class OrderService
                     json_encode($paymentAdditionalInformation)
                 );
         }
-        
+
         if ($paymentStatus == 'PENDING_CREDIT' && $status == 'success') {
             $order->setState("pending_payment")->setStatus("pending_payment");
             $order->addCommentToStatusHistory(__("PENDING_CREDIT"));
@@ -146,7 +146,7 @@ class OrderService
         }
 
         if (!$isWebhook) {
-            $order->addCommentToStatusHistory("Payment ID: ".$response->getPaymentId()." - Conversation ID:".$response->getConversationId());
+            $order->addCommentToStatusHistory("Payment ID: " . $response->getPaymentId() . " - Conversation ID:" . $response->getConversationId());
         }
 
         $this->orderRepository->save($order);
@@ -166,7 +166,7 @@ class OrderService
             return $this->orderRepository->get($orderId);
         } catch (Exception $e) {
             $this->errorLogger->critical(
-                "findOrderById: $orderId - Message: ".$e->getMessage(),
+                "findOrderById: $orderId - Message: " . $e->getMessage(),
                 ['fileName' => __FILE__, 'lineNumber' => __LINE__]
             );
             return null;
