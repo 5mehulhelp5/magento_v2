@@ -170,38 +170,42 @@ class IyzipayResponse implements HttpPostActionInterface, CsrfAwareActionInterfa
                 return $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
             }
 
-            switch ($response->getStatus()) {
-                case 'success':
-                    $this->orderService->updateOrderPaymentStatus($orderId, $response);
+            $status = $response->getStatus();
+            $paymentStatus = $response->getPaymentStatus();
 
-                    $customerId = $this->utilityHelper->getCustomerId($this->customerSession);
-                    if ($customerId != 0) {
-                        $this->cardService->setUserCard($response, $apiKey, $customerId);
-                    }
+            $this->orderService->updateOrderPaymentStatus($orderId, $response);
 
-                    $this->checkoutSession->setLastQuoteId($quoteId);
-                    $this->checkoutSession->setLastSuccessQuoteId($order->getQuoteId());
-                    $this->checkoutSession->setLastOrderId($order->getId());
-                    $this->checkoutSession->setLastRealOrderId($order->getIncrementId());
-                    $this->checkoutSession->setLastOrderStatus($order->getStatus());
+            if ($status === 'success' && $paymentStatus !== 'FAILURE') {
+                $customerId = $this->utilityHelper->getCustomerId($this->customerSession);
+                if ($customerId != 0) {
+                    $this->cardService->setUserCard($response, $apiKey, $customerId);
+                }
 
-                    $quote = $this->checkoutSession->getQuote();
-                    $quote->setIsActive(false);
+                $this->checkoutSession->setLastQuoteId($quoteId);
+                $this->checkoutSession->setLastSuccessQuoteId($order->getQuoteId());
+                $this->checkoutSession->setLastOrderId($order->getId());
+                $this->checkoutSession->setLastRealOrderId($order->getIncrementId());
+                $this->checkoutSession->setLastOrderStatus($order->getStatus());
 
-                    try {
-                        $this->quoteResource->save($quote);
-                    } catch (Exception $e) {
-                        $this->errorLogger->critical("Quote save error: " . $e->getMessage());
-                        throw new LocalizedException(__('Quote could not be saved.'));
-                    }
+                $quote = $this->checkoutSession->getQuote();
+                $quote->setIsActive(false);
 
-                    $resultRedirect = $this->resultFactory->create(ResultFactory::TYPE_REDIRECT);
-                    return $resultRedirect->setPath('checkout/onepage/success', ['_secure' => true]);
-                default:
-                    $this->messageManager->addErrorMessage(__('An error occurred while processing your payment. Please try again.'));
-                    $resultRedirect = $this->resultFactory->create(ResultFactory::TYPE_REDIRECT);
-                    return $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
+                try {
+                    $this->quoteResource->save($quote);
+                } catch (Exception $e) {
+                    $this->errorLogger->critical("Quote save error: " . $e->getMessage());
+                    throw new LocalizedException(__('Quote could not be saved.'));
+                }
+
+                $resultRedirect = $this->resultFactory->create(ResultFactory::TYPE_REDIRECT);
+                return $resultRedirect->setPath('checkout/onepage/success', ['_secure' => true]);
+            } else {
+                $this->orderService->releaseStock($order);
+                $this->messageManager->addErrorMessage(__('An error occurred while processing your payment. Please try again.'));
+                $resultRedirect = $this->resultFactory->create(ResultFactory::TYPE_REDIRECT);
+                return $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
             }
+
         } catch (Exception $e) {
             $this->errorLogger->critical(
                 "execute error: " . $e->getMessage(),

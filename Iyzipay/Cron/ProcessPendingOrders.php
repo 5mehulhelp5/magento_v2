@@ -32,6 +32,7 @@ use Iyzico\Iyzipay\Library\Request\RetrieveCheckoutFormRequest;
 use Iyzico\Iyzipay\Logger\IyziCronLogger;
 use Iyzico\Iyzipay\Model\ResourceModel\IyziOrderJob\Collection;
 use Iyzico\Iyzipay\Model\ResourceModel\IyziOrderJob\CollectionFactory;
+use Iyzico\Iyzipay\Service\OrderService;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Sales\Api\OrderRepositoryInterface;
@@ -41,6 +42,7 @@ use Magento\Store\Model\StoreManagerInterface;
 class ProcessPendingOrders
 {
     protected const PAGE_SIZE = 100;
+    protected const IYZICO_TOKEN_EXPIRATION_MIN = 30;
 
     public function __construct(
         protected readonly IyziCronLogger $cronLogger,
@@ -49,7 +51,8 @@ class ProcessPendingOrders
         protected readonly StoreManagerInterface $storeManager,
         protected readonly OrderRepositoryInterface $orderRepository,
         protected readonly CollectionFactory $collectionFactory,
-        protected readonly ConfigHelper $configHelper
+        protected readonly ConfigHelper $configHelper,
+        protected readonly OrderService $orderService
     ) {
     }
 
@@ -60,15 +63,19 @@ class ProcessPendingOrders
 
             $page = 1;
             $processedCount = 0;
-            $ordersToDelete = [];
             $totalPages = $this->getTotalPages();
+
+            $ordersToDelete = $this->getOrdersToDelete($page);
+            if (!empty($ordersToDelete)) {
+                $this->deleteProcessedOrders($ordersToDelete);
+            }
 
             while ($page <= $totalPages) {
                 $orders = $this->getPageOfOrders($page);
                 $ordersCount = count($orders);
 
                 if ($ordersCount > 0) {
-                    $this->processOrders($orders, $ordersToDelete);
+                    $this->processOrders($orders);
                     $processedCount += $ordersCount;
                 }
 
@@ -79,10 +86,6 @@ class ProcessPendingOrders
                 ]);
 
                 $page++;
-            }
-
-            if (!empty($ordersToDelete)) {
-                $this->deleteProcessedOrders($ordersToDelete);
             }
 
             $this->cronLogger->info('iyzico cron job completed', ['total_processed' => $processedCount]);
@@ -101,11 +104,24 @@ class ProcessPendingOrders
      */
     private function getTotalPages(): float
     {
-        $totalItems = $this->collection
-            ->addFieldToFilter('status', ['in' => ['pending_payment', 'received']])
-            ->getSize();
+        $totalItems = $this->collection->getSize();
 
         return ceil($totalItems / self::PAGE_SIZE);
+    }
+
+
+    /**
+     * Summary of getOrdersToDelete
+     * @return float
+     */
+    private function getOrdersToDelete($page): array
+    {
+        $this->collection
+            ->addFieldToFilter('status', ['in' => ['processing', 'canceled']])
+            ->setPageSize(self::PAGE_SIZE)
+            ->setCurPage($page);
+
+        return $this->collection->getAllIds();
     }
 
     private function getPageOfOrders($page): array
@@ -120,25 +136,29 @@ class ProcessPendingOrders
         return $this->collection->getItems();
     }
 
-    private function processOrders($orders, &$ordersToDelete): void
+    private function processOrders($orders): void
     {
-
         $this->cronLogger->info('Processing orders', ['count' => count($orders)]);
-        $this->cronLogger->info('Orders', ['orders' => $orders]);
-        $this->cronLogger->info('OrdersToDelete', ['ordersToDelete' => $ordersToDelete]);
-
         $promises = [];
         $client = new Client();
 
         foreach ($orders as $order) {
+            if (!$this->shouldProcessOrder($order)) {
+                continue;
+            }
+
             $token = $order->getIyzicoPaymentToken();
             $conversationId = $order->getIyzicoConversationId();
-            $promises[$order->getId()] = $this->getPaymentDetailAsync($ $token, $conversationId);
+            $promises[$order->getId()] = $this->getPaymentDetailAsync($token, $conversationId);
         }
 
         $responses = Utils::settle($promises)->wait();
 
         foreach ($orders as $order) {
+            if (!isset($responses[$order->getId()]) || $responses[$order->getId()]['state'] !== 'fulfilled') {
+                continue;
+            }
+
             $response = $responses[$order->getId()]['value'];
             $responseBody = json_decode($response->getRawResult());
 
@@ -150,11 +170,10 @@ class ProcessPendingOrders
             }
 
             $order = $this->updateOrder($order, $responseBody);
-            $order = $this->updateLastControlDate($order);
             $order->save();
 
-            if ($order->getStatus() == 'canceled' || $order->getStatus() == 'processing') {
-                $ordersToDelete[] = $order->getId();
+            if ($this->shouldCancelOrder($order, $responseBody)) {
+                $this->cancelOrder($order);
             }
         }
     }
@@ -204,8 +223,8 @@ class ProcessPendingOrders
 
     private function updateOrder($order, $responseBody): mixed
     {
-        $paymentStatus = $responseBody->getPaymentStatus() ?? '';
-        $status = $responseBody->getStatus() ?? '';
+        $paymentStatus = $responseBody->paymentStatus ?? '';
+        $status = $responseBody->status ?? '';
 
         $mapping = $this->mapping($paymentStatus, $status);
 
@@ -240,7 +259,7 @@ class ProcessPendingOrders
 
     private function mapping(string $paymentStatus, string $status): array
     {
-        if ($status == "failure")
+        if ($status == "failure" && $paymentStatus != '')
             return ['state' => "canceled", 'status' => "canceled", 'comment' => __("CANCELLED_ORDER")];
 
         if ($paymentStatus == 'INIT_THREEDS' && $status == 'success')
@@ -258,24 +277,6 @@ class ProcessPendingOrders
         return [];
     }
 
-    private function updateLastControlDate($order)
-    {
-        $this->cronLogger->info('Updating last control date', ['order_id' => $order->getOrderId()]);
-
-        $oldLastControlledAt = $order->getLastControlledAt();
-        $newLastControlledAt = date('Y-m-d H:i:s');
-
-        $order->setLastControlledAt($newLastControlledAt);
-
-        $this->cronLogger->info('Last control date updated', [
-            'order_id' => $order->getOrderId(),
-            'old_last_control_date' => $oldLastControlledAt,
-            'new_last_control_date' => $newLastControlledAt
-        ]);
-
-        return $order;
-    }
-
     private function deleteProcessedOrders($orderIds): void
     {
         if (empty($orderIds)) {
@@ -289,6 +290,76 @@ class ProcessPendingOrders
         $collection->walk('delete');
 
         $this->cronLogger->info("Bulk delete completed", ['deleted_count' => $deletedCount]);
+    }
+
+    private function isPaymentExpired($order): bool
+    {
+        $expirationTime = strtotime($order->getCreatedAt()) + self::IYZICO_TOKEN_EXPIRATION_MIN;
+        return time() > $expirationTime;
+    }
+
+    private function shouldProcessOrder($order): bool
+    {
+        if (!$this->isPaymentExpired($order)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function shouldCancelOrder($order, $responseBody): bool
+    {
+        $paymentStatus = $responseBody->paymentStatus ?? '';
+        $status = $responseBody->status ?? '';
+
+        $cancelConditions = [
+            ($status == 'failure' && $paymentStatus != ''),
+            ($paymentStatus == 'INIT_BANK_TRANSFER' && $this->isBankTransferExpired($order)),
+            ($paymentStatus == 'PENDING_CREDIT' && $this->isOrderTooOld($order))
+        ];
+
+        return in_array(true, $cancelConditions);
+    }
+
+    private function cancelOrder($order): void
+    {
+        try {
+            $magentoOrder = $this->orderRepository->get($order->getOrderId());
+            $this->orderService->releaseStock($magentoOrder);
+
+            $magentoOrder->setState("canceled");
+            $magentoOrder->setStatus("canceled");
+            $magentoOrder->addStatusHistoryComment(__("Order automatically canceled by iyzico payment gateway"));
+
+            $this->orderRepository->save($magentoOrder);
+
+            $this->cronLogger->info('Order canceled', [
+                'order_id' => $order->getOrderId(),
+                'reason' => 'Payment not completed'
+            ]);
+        } catch (Exception $e) {
+            $this->cronLogger->error('Failed to cancel order', [
+                'order_id' => $order->getOrderId(),
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
+    private function isBankTransferExpired($order): bool
+    {
+        $waitingPeriod = 24;
+
+        $orderDate = strtotime($order->getCreatedAt());
+        $expirationTime = $orderDate + ($waitingPeriod * 3600);
+
+        return time() > $expirationTime;
+    }
+
+    private function isOrderTooOld($order, $maxAgeHours = 72): bool
+    {
+        $orderDate = strtotime($order->getCreatedAt());
+        $expirationTime = $orderDate + ($maxAgeHours * 3600);
+        return time() > $expirationTime;
     }
 
 }

@@ -35,13 +35,13 @@ use Magento\Framework\Exception\LocalizedException;
 use Magento\Store\Model\ScopeInterface;
 
 
-class IyzipayConfigSaveBefore implements ObserverInterface
+readonly class IyzipayConfigSaveBefore implements ObserverInterface
 {
     public function __construct(
-        private readonly UtilityHelper $utilityHelper,
-        private readonly ConfigHelper $configHelper,
-        private readonly WriterInterface $configWriter,
-        private readonly Http $request
+        private UtilityHelper $utilityHelper,
+        private ConfigHelper $configHelper,
+        private WriterInterface $configWriter,
+        private Http $request
     ) {
     }
 
@@ -57,33 +57,35 @@ class IyzipayConfigSaveBefore implements ObserverInterface
 
         if (!empty($postData['groups']['iyzipay']['fields']['active'])) {
             $baseUrl = $this->configHelper->getBaseUrl();
-            $apiKey = $postData['groups']['iyzipay']['fields']['api_key']['value'];
-            $secretKey = $postData['groups']['iyzipay']['fields']['secret_key']['value'];
+            $apiKey = $postData['groups']['iyzipay']['fields']['api_key']['value'] ?? $this->configHelper->getApiKey();
+            $secretKey = $postData['groups']['iyzipay']['fields']['secret_key']['value'] ?? $this->configHelper->getSecretKey();
 
             $websiteId = $this->configHelper->getWebsiteId();
             $locale = $this->configHelper->getLocale();
             $cutLocale = $this->utilityHelper->cutLocale($locale);
-            $position = $postData['groups']['iyzipay']['fields']['overlayscript']['value'];
+            $position = $postData['groups']['iyzipay']['fields']['overlayscript']['value'] ?? $this->configHelper->getOverlayScript();
 
-            $request = new RetrieveProtectedOverleyScriptRequest();
-            $request->setLocale($cutLocale);
-            $request->setConversationId(rand(100000, 99999999));
-            $request->setPosition($position);
+            if ($position != null) {
+                $request = new RetrieveProtectedOverleyScriptRequest();
+                $request->setLocale($cutLocale);
+                $request->setConversationId(rand(100000, 99999999));
+                $request->setPosition($position);
 
-            $options = new Options();
-            $options->setApiKey($apiKey);
-            $options->setSecretKey($secretKey);
-            $options->setBaseUrl($baseUrl);
+                $options = new Options();
+                $options->setApiKey($apiKey);
+                $options->setSecretKey($secretKey);
+                $options->setBaseUrl($baseUrl);
 
-            $response = ProtectedOverleyScript::retrieve($request, $options);
+                $response = ProtectedOverleyScript::retrieve($request, $options);
 
-            if ($response->getStatus() == 'success') {
-                $this->configWriter->save(
-                    'payment/iyzipay/protectedShopId',
-                    $response->getProtectedShopId(),
-                    ScopeInterface::SCOPE_WEBSITES,
-                    $websiteId
-                );
+                if ($response->getStatus() == 'success') {
+                    $this->configWriter->save(
+                        'payment/iyzipay/protectedShopId',
+                        $response->getProtectedShopId(),
+                        ScopeInterface::SCOPE_WEBSITES,
+                        $websiteId
+                    );
+                }
             }
         }
     }

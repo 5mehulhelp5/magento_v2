@@ -46,7 +46,7 @@ class CardService
                 $customerCardUserKey = $iyziCard->getData('card_user_key');
 
                 if ($response->getCardUserKey() != $customerCardUserKey) {
-                    if ($iyziCard->getId()) {
+                    if ($iyziCard->getIyzicoCardId()) {
                         $iyziCard->setCardUserKey($response->getCardUserKey());
                     } else {
                         $iyziCard = $this->iyziCardFactory->create();
@@ -59,7 +59,7 @@ class CardService
                     $this->iyziCardResource->save($iyziCard);
                 }
             } catch (Throwable $th) {
-                $this->errorLogger->critical("setUserCard: " . $th->getMessage(), [
+                $this->errorLogger->critical("setUserCard: ".$th->getMessage(), [
                     'fileName' => __FILE__,
                     'lineNumber' => __LINE__,
                 ]);

@@ -9,8 +9,9 @@ use Magento\Customer\Model\Session as CustomerSession;
 use Magento\Framework\Exception\AlreadyExistsException;
 use Magento\Framework\Exception\CouldNotSaveException;
 use Magento\Framework\Exception\NoSuchEntityException;
+use Magento\InventoryReservationsApi\Model\AppendReservationsInterface;
+use Magento\InventoryReservationsApi\Model\ReservationBuilderInterface;
 use Magento\Quote\Api\CartManagementInterface;
-use Magento\Quote\Model\QuoteManagement;
 use Magento\Quote\Model\QuoteRepository;
 use Magento\Quote\Model\ResourceModel\Quote;
 use Magento\Sales\Api\Data\OrderInterface;
@@ -22,12 +23,13 @@ class OrderService
 
     public function __construct(
         private readonly OrderRepositoryInterface $orderRepository,
-        private readonly QuoteManagement $quoteManagement,
         private readonly QuoteRepository $quoteRepository,
         private readonly Quote $quoteResource,
         private readonly UtilityHelper $utilityHelper,
         private readonly IyziErrorLogger $errorLogger,
-        private readonly OrderJobService $orderJobService
+        private readonly OrderJobService $orderJobService,
+        private readonly ReservationBuilderInterface $reservationBuilder,
+        private readonly AppendReservationsInterface $appendReservations
     ) {
     }
 
@@ -62,6 +64,8 @@ class OrderService
         $order->addCommentToStatusHistory($comment);
         $order->getPayment()->setMethod('iyzipay');
         $order->setCanSendNewEmailFlag(false);
+        $order->setEmailSent(false);
+        $order->setSendEmail(false);
 
         $this->orderRepository->save($order);
 
@@ -104,7 +108,7 @@ class OrderService
                     json_encode($paymentAdditionalInformation)
                 );
         }
-
+        
         if ($paymentStatus == 'PENDING_CREDIT' && $status == 'success') {
             $order->setState("pending_payment")->setStatus("pending_payment");
             $order->addCommentToStatusHistory(__("PENDING_CREDIT"));
@@ -121,6 +125,20 @@ class OrderService
             $order->setState("processing")->setStatus("processing");
             $order->addCommentToStatusHistory(__("SUCCESS"));
             $this->orderJobService->setOrderJobStatus($orderId, "processing");
+
+            $order->setCanSendNewEmailFlag(true);
+            $order->setEmailSent(true);
+            $order->setSendEmail(true);
+        }
+
+        if ($paymentStatus == 'FAILURE') {
+            $order->setState("canceled")->setStatus("canceled");
+            $order->addCommentToStatusHistory(__("FAILURE"));
+            $this->orderJobService->removeIyziOrderJobTable($orderId);
+
+            $order->setCanSendNewEmailFlag(false);
+            $order->setEmailSent(false);
+            $order->setSendEmail(false);
         }
 
         if ($response->getInstallment() > 1) {
@@ -131,7 +149,6 @@ class OrderService
             $order->addCommentToStatusHistory("Payment ID: ".$response->getPaymentId()." - Conversation ID:".$response->getConversationId());
         }
 
-        $order->setCanSendNewEmailFlag(true);
         $this->orderRepository->save($order);
     }
 
@@ -190,5 +207,48 @@ class OrderService
         $order->setState("canceled")->setStatus("canceled");
         $order->addCommentToStatusHistory(__("Order has been canceled."));
         $this->orderRepository->save($order);
+    }
+
+    public function releaseStock($magentoOrder)
+    {
+        try {
+            $reservations = [];
+            $processedSkus = [];
+
+            foreach ($magentoOrder->getAllItems() as $item) {
+                $sku = $item->getSku();
+                $quantity = $item->getQtyOrdered();
+                $stockId = 1;
+                $metadata = "Released stock for Order ID: {$magentoOrder->getEntityId()}";
+
+                if (in_array($sku, $processedSkus, true)) {
+                    continue;
+                }
+
+                $reservation = $this->reservationBuilder
+                    ->setSku($sku)
+                    ->setQuantity($quantity)
+                    ->setStockId($stockId)
+                    ->setMetadata($metadata)
+                    ->build();
+
+                $reservations[] = $reservation;
+                $processedSkus[] = $sku;
+            }
+
+            if (!empty($reservations)) {
+                $this->appendReservations->execute($reservations);
+            }
+        } catch (CouldNotSaveException $e) {
+            $this->errorLogger->error("Failed to release stock", [
+                'order_id' => $magentoOrder->getEntityId(),
+                'error' => $e->getMessage()
+            ]);
+        } catch (Exception $e) {
+            $this->errorLogger->error("Unexpected error occurred during stock release", [
+                'order_id' => $magentoOrder->getEntityId(),
+                'error' => $e->getMessage()
+            ]);
+        }
     }
 }

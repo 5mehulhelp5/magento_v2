@@ -135,4 +135,23 @@ class OrderJobService
             $this->errorLogger->critical($e->getMessage());
         }
     }
+
+    /**
+     * Remove Iyzi Order Table
+     *
+     * This function is responsible for removing the iyzi order table.
+     *
+     * @param  int  $orderId
+     * @return void
+     */
+    public function removeIyziOrderJobTable(int $orderId): void
+    {
+        try {
+            $iyziOrderJob = $this->iyziOrderJobFactory->create();
+            $iyziOrderJob->load($orderId, 'order_id');
+            $iyziOrderJob->delete();
+        } catch (Exception $e) {
+            $this->errorLogger->critical($e->getMessage());
+        }
+    }
 }
