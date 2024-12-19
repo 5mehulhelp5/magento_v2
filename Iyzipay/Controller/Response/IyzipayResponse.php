@@ -25,9 +25,6 @@ namespace Iyzico\Iyzipay\Controller\Response;
 use Exception;
 use Iyzico\Iyzipay\Helper\ConfigHelper;
 use Iyzico\Iyzipay\Helper\UtilityHelper;
-use Iyzico\Iyzipay\Library\Model\CheckoutForm;
-use Iyzico\Iyzipay\Library\Options;
-use Iyzico\Iyzipay\Library\Request\RetrieveCheckoutFormRequest;
 use Iyzico\Iyzipay\Logger\IyziErrorLogger;
 use Iyzico\Iyzipay\Service\CardService;
 use Iyzico\Iyzipay\Service\OrderJobService;
@@ -106,15 +103,10 @@ class IyzipayResponse implements HttpPostActionInterface, CsrfAwareActionInterfa
     {
         try {
             $token = $this->request->getParam('token');
-            $locale = $this->configHelper->getLocale();
 
             $orderId = $this->orderJobService->findParametersByToken($token, 'order_id');
             $quoteId = $this->orderJobService->findParametersByToken($token, 'quote_id');
             $conversationId = $this->orderJobService->findParametersByToken($token, 'iyzico_conversation_id');
-
-            $apiKey = $this->configHelper->getApiKey();
-            $secretKey = $this->configHelper->getSecretKey();
-            $baseUrl = $this->configHelper->getBaseUrl();
 
             $quote = $this->findQuoteById($quoteId);
             $order = $this->orderService->findOrderById($orderId);
@@ -131,45 +123,7 @@ class IyzipayResponse implements HttpPostActionInterface, CsrfAwareActionInterfa
                 return $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
             }
 
-            $request = new RetrieveCheckoutFormRequest();
-            $request->setLocale($locale);
-            $request->setConversationId($conversationId);
-            $request->setToken($token);
-
-            $options = new Options();
-            $options->setBaseUrl($baseUrl);
-            $options->setApiKey($apiKey);
-            $options->setSecretKey($secretKey);
-
-            $response = CheckoutForm::retrieve($request, $options);
-
-            $responsePaymentStatus = $response->getPaymentStatus();
-            $responsePaymentId = $response->getPaymentId();
-            $responseCurrency = $response->getCurrency();
-            $responseBasketId = $response->getBasketId();
-            $responseConversationId = $response->getConversationId();
-            $responsePaidPrice = $response->getPaidPrice();
-            $responsePrice = $response->getPrice();
-            $responseToken = $response->getToken();
-            $responseSignature = $response->getSignature();
-
-            $calculateSignature = $this->utilityHelper->calculateHmacSHA256Signature([
-                $responsePaymentStatus,
-                $responsePaymentId,
-                $responseCurrency,
-                $responseBasketId,
-                $responseConversationId,
-                $responsePaidPrice,
-                $responsePrice,
-                $responseToken
-            ], $secretKey);
-
-            if ($responseSignature !== $calculateSignature) {
-                $this->messageManager->addErrorMessage(__('An error occurred while processing your payment. Please try again.'));
-                $resultRedirect = $this->resultFactory->create(ResultFactory::TYPE_REDIRECT);
-                return $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
-            }
-
+            $response = $this->orderService->retrieveAndValidateCheckoutForm($token, $conversationId);
             $status = $response->getStatus();
             $paymentStatus = $response->getPaymentStatus();
 
@@ -178,7 +132,7 @@ class IyzipayResponse implements HttpPostActionInterface, CsrfAwareActionInterfa
             if ($status === 'success' && $paymentStatus !== 'FAILURE') {
                 $customerId = $this->utilityHelper->getCustomerId($this->customerSession);
                 if ($customerId != 0) {
-                    $this->cardService->setUserCard($response, $apiKey, $customerId);
+                    $this->cardService->setUserCard($response, $customerId);
                 }
 
                 $this->checkoutSession->setLastQuoteId($quoteId);
@@ -205,7 +159,6 @@ class IyzipayResponse implements HttpPostActionInterface, CsrfAwareActionInterfa
                 $resultRedirect = $this->resultFactory->create(ResultFactory::TYPE_REDIRECT);
                 return $resultRedirect->setPath('checkout/cart', ['_secure' => true]);
             }
-
         } catch (Exception $e) {
             $this->errorLogger->critical(
                 "execute error: " . $e->getMessage(),

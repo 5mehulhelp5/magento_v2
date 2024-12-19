@@ -33,10 +33,11 @@ class CardService
      * @return void
      * @throws AlreadyExistsException
      */
-    public function setUserCard(CheckoutForm $response, string $apiKey, int|null $customerId): void
+    public function setUserCard(CheckoutForm $response, int|null $customerId): void
     {
         if ($response->getCardUserKey() !== null && $customerId != 0) {
             try {
+                $apiKey = $this->configHelper->getApiKey();
                 $collection = $this->iyziCardCollectionFactory->create()
                     ->addFieldToFilter('customer_id', $customerId)
                     ->addFieldToFilter('api_key', $apiKey)
@@ -59,7 +60,7 @@ class CardService
                     $this->iyziCardResource->save($iyziCard);
                 }
             } catch (Throwable $th) {
-                $this->errorLogger->critical("setUserCard: ".$th->getMessage(), [
+                $this->errorLogger->critical("setUserCard: " . $th->getMessage(), [
                     'fileName' => __FILE__,
                     'lineNumber' => __LINE__,
                 ]);

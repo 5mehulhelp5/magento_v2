@@ -6,9 +6,6 @@ use Exception;
 use Iyzico\Iyzipay\Api\WebhookInterface;
 use Iyzico\Iyzipay\Helper\ConfigHelper;
 use Iyzico\Iyzipay\Helper\UtilityHelper;
-use Iyzico\Iyzipay\Library\Model\CheckoutForm;
-use Iyzico\Iyzipay\Library\Options;
-use Iyzico\Iyzipay\Library\Request\RetrieveCheckoutFormRequest;
 use Iyzico\Iyzipay\Logger\IyziWebhookLogger;
 use Iyzico\Iyzipay\Model\Data\WebhookData;
 use Iyzico\Iyzipay\Service\OrderJobService;
@@ -142,6 +139,9 @@ class Webhook implements WebhookInterface
         return $webhookData;
     }
 
+    /**
+     * @inheritDoc
+     */
     public function generateKey(string $secretKey, WebhookData $webhookData): string
     {
         return $secretKey . $webhookData->getIyziEventType() . $webhookData->getIyziPaymentId() . $webhookData->getPaymentConversationId() . $webhookData->getStatus();
@@ -164,51 +164,8 @@ class Webhook implements WebhookInterface
     {
         $token = $webhookData->getToken();
         $conversationId = $webhookData->getPaymentConversationId();
-        $locale = $this->configHelper->getLocale();
-
-        $apiKey = $this->configHelper->getApiKey();
-        $secretKey = $this->configHelper->getSecretKey();
-        $baseUrl = $this->configHelper->getBaseUrl();
-
-        $request = new RetrieveCheckoutFormRequest();
-        $request->setLocale($locale);
-        $request->setConversationId($conversationId);
-        $request->setToken($token);
-
-        $options = new Options();
-        $options->setBaseUrl($baseUrl);
-        $options->setApiKey($apiKey);
-        $options->setSecretKey($secretKey);
-
-        $response = CheckoutForm::retrieve($request, $options);
-
-        $responsePaymentStatus = $response->getPaymentStatus();
-        $responsePaymentId = $response->getPaymentId();
-        $responseCurrency = $response->getCurrency();
-        $responseBasketId = $response->getBasketId();
-        $responseConversationId = $response->getConversationId();
-        $responsePaidPrice = $response->getPaidPrice();
-        $responsePrice = $response->getPrice();
-        $responseToken = $response->getToken();
-        $responseSignature = $response->getSignature();
-
-        $calculateSignature = $this->utilityHelper->calculateHmacSHA256Signature([
-            $responsePaymentStatus,
-            $responsePaymentId,
-            $responseCurrency,
-            $responseBasketId,
-            $responseConversationId,
-            $responsePaidPrice,
-            $responsePrice,
-            $responseToken
-        ], $secretKey);
-
-        if ($responseSignature !== $calculateSignature) {
-            throw new LocalizedException(__('Signature mismatch'));
-        }
-
+        $response = $this->orderService->retrieveAndValidateCheckoutForm($token, $conversationId);
         $orderId = $this->orderJobService->findParametersByToken($token, 'order_id');
-
         $this->orderService->updateOrderPaymentStatus($orderId, $response, true);
     }
 
@@ -225,7 +182,7 @@ class Webhook implements WebhookInterface
         $orderPaymentRepository = $objectManager->create(OrderPaymentRepositoryInterface::class);
 
         $searchCriteria = $searchCriteriaBuilder
-            ->addFilter('last_trans_id', $paymentId, 'eq')
+            ->addFilter('last_trans_id', $paymentId)
             ->create();
 
         $paymentList = $orderPaymentRepository->getList($searchCriteria);

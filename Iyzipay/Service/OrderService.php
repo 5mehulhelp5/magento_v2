@@ -3,11 +3,16 @@
 namespace Iyzico\Iyzipay\Service;
 
 use Exception;
+use Iyzico\Iyzipay\Helper\ConfigHelper;
 use Iyzico\Iyzipay\Helper\UtilityHelper;
+use Iyzico\Iyzipay\Library\Model\CheckoutForm;
+use Iyzico\Iyzipay\Library\Options;
+use Iyzico\Iyzipay\Library\Request\RetrieveCheckoutFormRequest;
 use Iyzico\Iyzipay\Logger\IyziErrorLogger;
 use Magento\Customer\Model\Session as CustomerSession;
 use Magento\Framework\Exception\AlreadyExistsException;
 use Magento\Framework\Exception\CouldNotSaveException;
+use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\Exception\NoSuchEntityException;
 use Magento\InventoryReservationsApi\Model\AppendReservationsInterface;
 use Magento\InventoryReservationsApi\Model\ReservationBuilderInterface;
@@ -18,18 +23,19 @@ use Magento\Sales\Api\Data\OrderInterface;
 use Magento\Sales\Api\OrderRepositoryInterface;
 use Magento\Sales\Model\Order\Payment\Transaction;
 
-class OrderService
+readonly class OrderService
 {
 
     public function __construct(
-        private readonly OrderRepositoryInterface $orderRepository,
-        private readonly QuoteRepository $quoteRepository,
-        private readonly Quote $quoteResource,
-        private readonly UtilityHelper $utilityHelper,
-        private readonly IyziErrorLogger $errorLogger,
-        private readonly OrderJobService $orderJobService,
-        private readonly ReservationBuilderInterface $reservationBuilder,
-        private readonly AppendReservationsInterface $appendReservations
+        private OrderRepositoryInterface $orderRepository,
+        private QuoteRepository $quoteRepository,
+        private Quote $quoteResource,
+        private UtilityHelper $utilityHelper,
+        private IyziErrorLogger $errorLogger,
+        private OrderJobService $orderJobService,
+        private ReservationBuilderInterface $reservationBuilder,
+        private AppendReservationsInterface $appendReservations,
+        private ConfigHelper $configHelper
     ) {
     }
 
@@ -40,11 +46,8 @@ class OrderService
      *
      * @throws CouldNotSaveException|NoSuchEntityException|AlreadyExistsException
      */
-    public function placeOrder(
-        int $quoteId,
-        CustomerSession $customerSession,
-        CartManagementInterface $cartManagement
-    ): int {
+    public function placeOrder(int $quoteId, CustomerSession $customerSession, CartManagementInterface $cartManagement): int
+    {
         $quote = $this->quoteRepository->get($quoteId);
         if ($customerSession->isLoggedIn()) {
             $orderId = $cartManagement->placeOrder($quoteId);
@@ -63,9 +66,6 @@ class OrderService
         $order->setState('pending_payment')->setStatus('pending_payment');
         $order->addCommentToStatusHistory($comment);
         $order->getPayment()->setMethod('iyzipay');
-        $order->setCanSendNewEmailFlag(false);
-        $order->setEmailSent(false);
-        $order->setSendEmail(false);
 
         $this->orderRepository->save($order);
 
@@ -127,18 +127,12 @@ class OrderService
             $this->orderJobService->setOrderJobStatus($orderId, "processing");
 
             $order->setCanSendNewEmailFlag(true);
-            $order->setEmailSent(true);
-            $order->setSendEmail(true);
         }
 
         if ($paymentStatus == 'FAILURE') {
             $order->setState("canceled")->setStatus("canceled");
             $order->addCommentToStatusHistory(__("FAILURE"));
             $this->orderJobService->removeIyziOrderJobTable($orderId);
-
-            $order->setCanSendNewEmailFlag(false);
-            $order->setEmailSent(false);
-            $order->setSendEmail(false);
         }
 
         if ($response->getInstallment() > 1) {
@@ -198,6 +192,8 @@ class OrderService
     /**
      * Cancel Order
      *
+     * This function is responsible for canceling the order.
+     *
      * @param  string  $orderId
      * @return void
      */
@@ -209,7 +205,15 @@ class OrderService
         $this->orderRepository->save($order);
     }
 
-    public function releaseStock($magentoOrder)
+    /**
+     * Relase Stock
+     *
+     * This function is responsible for releasing the stock.
+     *
+     * @param $magentoOrder
+     * @return void
+     */
+    public function releaseStock($magentoOrder): void
     {
         try {
             $reservations = [];
@@ -250,5 +254,37 @@ class OrderService
                 'error' => $e->getMessage()
             ]);
         }
+    }
+
+    /**
+     * Retrieve and validate checkout form response
+     *
+     * @param  string  $token
+     * @param  string  $conversationId
+     * @return CheckoutForm
+     * @throws LocalizedException|LocalizedException
+     */
+    public function retrieveAndValidateCheckoutForm(string $token, string $conversationId): CheckoutForm
+    {
+        $locale = $this->configHelper->getLocale();
+        $apiKey = $this->configHelper->getApiKey();
+        $secretKey = $this->configHelper->getSecretKey();
+        $baseUrl = $this->configHelper->getBaseUrl();
+
+        $request = new RetrieveCheckoutFormRequest();
+        $request->setLocale($locale);
+        $request->setConversationId($conversationId);
+        $request->setToken($token);
+
+        $options = new Options();
+        $options->setBaseUrl($baseUrl);
+        $options->setApiKey($apiKey);
+        $options->setSecretKey($secretKey);
+
+        $response = CheckoutForm::retrieve($request, $options);
+
+        $this->utilityHelper->validateSignature($response, $secretKey);
+
+        return $response;
     }
 }

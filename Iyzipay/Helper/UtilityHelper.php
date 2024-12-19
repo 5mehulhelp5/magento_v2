@@ -2,8 +2,10 @@
 
 namespace Iyzico\Iyzipay\Helper;
 
+use Iyzico\Iyzipay\Library\Model\CheckoutForm;
 use Iyzico\Iyzipay\Model\IyziCardFactory;
 use Magento\Customer\Model\Session as CustomerSession;
+use Magento\Framework\Exception\LocalizedException;
 use Magento\Quote\Model\Quote;
 
 class UtilityHelper
@@ -174,7 +176,7 @@ class UtilityHelper
     /**
      * Get Customer Id
      *
-     * @param  CustomerSession $customerSession
+     * @param  CustomerSession  $customerSession
      * @return int|null
      */
     public function getCustomerId(CustomerSession $customerSession): ?int
@@ -205,22 +207,6 @@ class UtilityHelper
         return '';
     }
 
-
-    /**
-     * Calculate HMAC SHA256 Signature
-     *
-     * @param  array  $params
-     * @param  string  $secretKey
-     * @return string
-     */
-    public function calculateHmacSHA256Signature(array $params, string $secretKey): string
-    {
-        $dataToSign = implode(':', $params);
-        $mac = hash_hmac('sha256', $dataToSign, $secretKey, true);
-
-        return bin2hex($mac);
-    }
-
     /**
      * Get Locale Name
      *
@@ -229,7 +215,6 @@ class UtilityHelper
      */
     public function cutLocale($locale): string
     {
-
         $locale = explode('_', $locale);
         return $locale[0];
     }
@@ -251,6 +236,58 @@ class UtilityHelper
         $quoteId = $checkoutSession->getId();
         $checkoutSession->setGuestQuoteId($quoteId);
         $customerSession->setEmail($customerEmail);
+    }
+
+    /**
+     * Validate Signature
+     *
+     * This function is responsible for validating the signature.
+     *
+     * @param  CheckoutForm  $response
+     * @param  string  $secretKey
+     * @throws LocalizedException
+     */
+    public function validateSignature(CheckoutForm $response, string $secretKey): void
+    {
+        $responsePaymentStatus = $response->getPaymentStatus();
+        $responsePaymentId = $response->getPaymentId();
+        $responseCurrency = $response->getCurrency();
+        $responseBasketId = $response->getBasketId();
+        $responseConversationId = $response->getConversationId();
+        $responsePaidPrice = $response->getPaidPrice();
+        $responsePrice = $response->getPrice();
+        $responseToken = $response->getToken();
+        $responseSignature = $response->getSignature();
+
+        $calculateSignature = $this->calculateHmacSHA256Signature([
+            $responsePaymentStatus,
+            $responsePaymentId,
+            $responseCurrency,
+            $responseBasketId,
+            $responseConversationId,
+            $responsePaidPrice,
+            $responsePrice,
+            $responseToken
+        ], $secretKey);
+
+        if ($responseSignature !== $calculateSignature) {
+            throw new LocalizedException(__('Signature mismatch'));
+        }
+    }
+
+    /**
+     * Calculate HMAC SHA256 Signature
+     *
+     * @param  array  $params
+     * @param  string  $secretKey
+     * @return string
+     */
+    public function calculateHmacSHA256Signature(array $params, string $secretKey): string
+    {
+        $dataToSign = implode(':', $params);
+        $mac = hash_hmac('sha256', $dataToSign, $secretKey, true);
+
+        return bin2hex($mac);
     }
 
 }
