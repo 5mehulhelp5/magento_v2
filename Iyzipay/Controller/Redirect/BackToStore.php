@@ -1,5 +1,25 @@
 <?php
 
+/**
+ * iyzico Payment Gateway For Magento 2
+ * Copyright (C) 2018 iyzico
+ *
+ * This file is part of Iyzico/Iyzipay.
+ *
+ * Iyzico/Iyzipay is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
 namespace Iyzico\Iyzipay\Controller\Redirect;
 
 use Iyzico\Iyzipay\Service\OrderJobService;
@@ -35,20 +55,21 @@ class BackToStore implements HttpGetActionInterface
         $quoteId = $this->request->getParam('quote_id');
         if ($quoteId) {
             $quote = $this->quoteRepository->get($quoteId);
-
             $orderId = $quote->getReservedOrderId();
             if ($orderId) {
                 $order = $this->orderRepository->get($orderId);
-                $order->setState('canceled')->setStatus('canceled');
+                if ($order->getState() == 'pending_payment') {
+                    $order->setState('canceled')->setStatus('canceled');
 
-                $this->orderService->releaseStock($order);
-                $this->orderJobService->removeIyziOrderJobTable($orderId);
+                    $this->orderService->releaseStock($order);
+                    $this->orderJobService->removeIyziOrderJobTable($orderId);
 
-                $this->orderRepository->save($order);
+                    $this->orderRepository->save($order);
+                }
+
+                $quote->setIsActive(1);
+                $this->quoteRepository->save($quote);
             }
-
-            $quote->setIsActive(1);
-            $this->quoteRepository->save($quote);
         }
 
         $redirect = $this->redirectFactory->create();
