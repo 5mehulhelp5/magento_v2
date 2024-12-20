@@ -20,6 +20,7 @@ use Magento\Quote\Api\CartManagementInterface;
 use Magento\Quote\Model\QuoteRepository;
 use Magento\Quote\Model\ResourceModel\Quote;
 use Magento\Sales\Api\Data\OrderInterface;
+use Magento\Sales\Api\Data\OrderPaymentInterface;
 use Magento\Sales\Api\OrderRepositoryInterface;
 use Magento\Sales\Model\Order\Payment\Transaction;
 
@@ -27,15 +28,15 @@ readonly class OrderService
 {
 
     public function __construct(
-        private OrderRepositoryInterface $orderRepository,
-        private QuoteRepository $quoteRepository,
-        private Quote $quoteResource,
-        private UtilityHelper $utilityHelper,
-        private IyziErrorLogger $errorLogger,
-        private OrderJobService $orderJobService,
-        private ReservationBuilderInterface $reservationBuilder,
-        private AppendReservationsInterface $appendReservations,
-        private ConfigHelper $configHelper
+        protected OrderRepositoryInterface $orderRepository,
+        protected QuoteRepository $quoteRepository,
+        protected Quote $quoteResource,
+        protected UtilityHelper $utilityHelper,
+        protected IyziErrorLogger $errorLogger,
+        protected OrderJobService $orderJobService,
+        protected ReservationBuilderInterface $reservationBuilder,
+        protected AppendReservationsInterface $appendReservations,
+        protected ConfigHelper $configHelper
     ) {
     }
 
@@ -46,8 +47,11 @@ readonly class OrderService
      *
      * @throws CouldNotSaveException|NoSuchEntityException|AlreadyExistsException
      */
-    public function placeOrder(int $quoteId, CustomerSession $customerSession, CartManagementInterface $cartManagement): int
-    {
+    public function placeOrder(
+        int $quoteId,
+        CustomerSession $customerSession,
+        CartManagementInterface $cartManagement
+    ): int {
         $quote = $this->quoteRepository->get($quoteId);
         if ($customerSession->isLoggedIn()) {
             $orderId = $cartManagement->placeOrder($quoteId);
@@ -91,48 +95,19 @@ readonly class OrderService
         $paymentStatus = $response->getPaymentStatus();
         $status = $response->getStatus();
 
-        if (!$isWebhook) {
-            $payment->setLastTransId($response->getPaymentId());
-            $paymentAdditionalInformation = [
-                'method_title' => 'iyzipay',
-                'iyzico_payment_id' => $response->getPaymentId(),
-                'iyzico_conversation_id' => $response->getConversationId(),
-            ];
+        $ordersByPaymentAndStatus = $this->utilityHelper->findOrderByPaymentAndStatus($paymentStatus, $status);
+        $order->setState($ordersByPaymentAndStatus['state']);
+        $order->setStatus($ordersByPaymentAndStatus['status']);
+        $order->addCommentToStatusHistory($ordersByPaymentAndStatus['comment']);
 
-            $payment->setAdditionalInformation($paymentAdditionalInformation);
-
-            $payment->setTransactionId($response->getPaymentId())
-                ->setIsTransactionClosed(0)
-                ->setTransactionAdditionalInfo(
-                    Transaction::RAW_DETAILS,
-                    json_encode($paymentAdditionalInformation)
-                );
-        }
-
-        if ($paymentStatus == 'PENDING_CREDIT' && $status == 'success') {
-            $order->setState("pending_payment")->setStatus("pending_payment");
-            $order->addCommentToStatusHistory(__("PENDING_CREDIT"));
-            $this->orderJobService->setOrderJobStatus($orderId, "pending_payment");
-        }
-
-        if ($paymentStatus == 'INIT_BANK_TRANSFER' && $status == 'success') {
-            $order->setState("pending_payment")->setStatus("pending_payment");
-            $order->addCommentToStatusHistory(__("INIT_BANK_TRANSFER"));
-            $this->orderJobService->setOrderJobStatus($orderId, "pending_payment");
+        if ($ordersByPaymentAndStatus['orderJobStatus'] != 'canceled') {
+            $this->orderJobService->setOrderJobStatus($orderId, $ordersByPaymentAndStatus['orderJobStatus']);
+        } else {
+            $this->orderJobService->removeIyziOrderJobTable($orderId);
         }
 
         if ($paymentStatus == 'SUCCESS' && $status == 'success') {
-            $order->setState("processing")->setStatus("processing");
-            $order->addCommentToStatusHistory(__("SUCCESS"));
-            $this->orderJobService->setOrderJobStatus($orderId, "processing");
-
             $order->setCanSendNewEmailFlag(true);
-        }
-
-        if ($paymentStatus == 'FAILURE') {
-            $order->setState("canceled")->setStatus("canceled");
-            $order->addCommentToStatusHistory(__("FAILURE"));
-            $this->orderJobService->removeIyziOrderJobTable($orderId);
         }
 
         if ($response->getInstallment() > 1) {
@@ -140,7 +115,7 @@ readonly class OrderService
         }
 
         if (!$isWebhook) {
-            $order->addCommentToStatusHistory("Payment ID: " . $response->getPaymentId() . " - Conversation ID:" . $response->getConversationId());
+            $order->addCommentToStatusHistory("Payment ID: ".$response->getPaymentId()." - Conversation ID:".$response->getConversationId());
         }
 
         $this->orderRepository->save($order);
@@ -160,7 +135,7 @@ readonly class OrderService
             return $this->orderRepository->get($orderId);
         } catch (Exception $e) {
             $this->errorLogger->critical(
-                "findOrderById: $orderId - Message: " . $e->getMessage(),
+                "findOrderById: $orderId - Message: ".$e->getMessage(),
                 ['fileName' => __FILE__, 'lineNumber' => __LINE__]
             );
             return null;
@@ -177,7 +152,7 @@ readonly class OrderService
      * @param $installment
      * @return mixed
      */
-    public function setOrderInstallmentFee($order, $paidPrice, $installment): mixed
+    private function setOrderInstallmentFee($order, $paidPrice, $installment): mixed
     {
         $grandTotal = $order->getGrandTotal();
 
@@ -286,5 +261,33 @@ readonly class OrderService
         $this->utilityHelper->validateSignature($response, $secretKey);
 
         return $response;
+    }
+
+    /**
+     * Update Payment Additional Information
+     *
+     * This function is responsible for updating the payment additional information.
+     *
+     * @param  OrderPaymentInterface|null  $payment
+     * @param  CheckoutForm  $response
+     * @return void
+     */
+    private function updatePaymentAdditionalInformation(
+        OrderPaymentInterface|null $payment,
+        CheckoutForm $response
+    ): void {
+        $payment->setLastTransId($response->getPaymentId());
+
+        $paymentAdditionalInformation = [
+            'method_title' => 'iyzipay',
+            'iyzico_payment_id' => $response->getPaymentId(),
+            'iyzico_conversation_id' => $response->getConversationId(),
+        ];
+
+        $payment->setAdditionalInformation($paymentAdditionalInformation);
+
+        $payment->setTransactionId($response->getPaymentId());
+        $payment->setIsTransactionClosed(0);
+        $payment->setTransactionAdditionalInfo(Transaction::RAW_DETAILS, json_encode($paymentAdditionalInformation));
     }
 }

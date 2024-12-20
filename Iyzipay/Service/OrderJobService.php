@@ -9,13 +9,13 @@ use Iyzico\Iyzipay\Model\ResourceModel\IyziOrderJob as IyziOrderJobResource;
 use Iyzico\Iyzipay\Model\ResourceModel\IyziOrderJob\CollectionFactory as IyziOrderJobCollectionFactory;
 use Throwable;
 
-class OrderJobService
+readonly class OrderJobService
 {
     public function __construct(
-        private readonly IyziOrderJobFactory $iyziOrderJobFactory,
-        private readonly IyziOrderJobResource $iyziOrderJobResource,
-        private readonly IyziOrderJobCollectionFactory $iyziOrderJobCollectionFactory,
-        private readonly IyziErrorLogger $errorLogger,
+        protected IyziOrderJobFactory $iyziOrderJobFactory,
+        protected IyziOrderJobResource $iyziOrderJobResource,
+        protected IyziOrderJobCollectionFactory $iyziOrderJobCollectionFactory,
+        protected IyziErrorLogger $errorLogger,
     ) {
     }
 
@@ -47,7 +47,7 @@ class OrderJobService
                 $this->iyziOrderJobResource->save($iyzicoOrderJob);
             }
         } catch (Throwable $th) {
-            $this->errorLogger->critical("setOrderJobStatus: " . $th->getMessage(), [
+            $this->errorLogger->critical("setOrderJobStatus: ".$th->getMessage(), [
                 'fileName' => __FILE__,
                 'lineNumber' => __LINE__,
             ]);
@@ -71,7 +71,7 @@ class OrderJobService
             $iyzicoOrderJob->setOrderId($orderId);
             $this->iyziOrderJobResource->save($iyzicoOrderJob);
         } catch (Throwable $th) {
-            $this->errorLogger->critical("assignOrderIdToIyzicoOrderJob: " . $th->getMessage(), [
+            $this->errorLogger->critical("assignOrderIdToIyzicoOrderJob: ".$th->getMessage(), [
                 'fileName' => __FILE__,
                 'lineNumber' => __LINE__,
             ]);
