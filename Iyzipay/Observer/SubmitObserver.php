@@ -23,11 +23,7 @@ namespace Iyzico\Iyzipay\Observer;
 
 use Magento\Framework\Event\Observer;
 use Magento\Framework\Event\ObserverInterface;
-
-use Magento\Quote\Model\Quote;
 use Magento\Sales\Model\Order;
-
-
 
 class SubmitObserver implements ObserverInterface
 {
@@ -36,10 +32,10 @@ class SubmitObserver implements ObserverInterface
      *
      * This method is called when the event specified in the events.xml file is triggered.
      *
-     * @param Observer $observer
+     * @param  Observer  $observer
      * @return void
      */
-    public function execute(Observer $observer)
+    public function execute(Observer $observer): void
     {
         /** @var  Order $order */
         $order = $observer->getEvent()->getOrder();
