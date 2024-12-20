@@ -9,6 +9,7 @@ use Iyzico\Iyzipay\Library\Model\CheckoutForm;
 use Iyzico\Iyzipay\Library\Options;
 use Iyzico\Iyzipay\Library\Request\RetrieveCheckoutFormRequest;
 use Iyzico\Iyzipay\Logger\IyziErrorLogger;
+use Iyzico\Iyzipay\Model\Data\WebhookData;
 use Magento\Customer\Model\Session as CustomerSession;
 use Magento\Framework\Exception\AlreadyExistsException;
 use Magento\Framework\Exception\CouldNotSaveException;
@@ -82,29 +83,35 @@ readonly class OrderService
      * This function is responsible for updating the order payment status based on the response.
      *
      * @param  string  $orderId
-     * @param  $response
+     * @param  mixed  $response
      * @param  bool  $isWebhook
      * @return void
      * @throws Exception
      */
-    public function updateOrderPaymentStatus(string $orderId, $response, bool $isWebhook = false): void
+    public function updateOrderPaymentStatus(string $orderId, mixed $response, string $webhook = 'no'): void
     {
+        $ordersByPaymentAndStatus = [];
+        $paymentStatus = '';
+        $status = '';
+
         $order = $this->findOrderById($orderId);
         $payment = $order->getPayment();
 
-        $paymentStatus = $response->getPaymentStatus();
-        $status = $response->getStatus();
+        if($webhook != 'v3'){
+            $paymentStatus = $response->getPaymentStatus();
+            $status = $response->getStatus();
+        }else{
+            $paymentStatus = $response->getIyziEventType();
+            $status = $response->getStatus();
+        }
 
         $ordersByPaymentAndStatus = $this->utilityHelper->findOrderByPaymentAndStatus($paymentStatus, $status);
+
         $order->setState($ordersByPaymentAndStatus['state']);
         $order->setStatus($ordersByPaymentAndStatus['status']);
         $order->addCommentToStatusHistory($ordersByPaymentAndStatus['comment']);
 
-        if ($ordersByPaymentAndStatus['orderJobStatus'] != 'canceled') {
-            $this->orderJobService->setOrderJobStatus($orderId, $ordersByPaymentAndStatus['orderJobStatus']);
-        } else {
-            $this->orderJobService->removeIyziOrderJobTable($orderId);
-        }
+        $this->orderJobService->setOrderJobStatus($orderId, $ordersByPaymentAndStatus['orderJobStatus']);
 
         if ($paymentStatus == 'SUCCESS' && $status == 'success') {
             $order->setCanSendNewEmailFlag(true);
@@ -114,8 +121,17 @@ readonly class OrderService
             $order = $this->setOrderInstallmentFee($order, $response->getPaidPrice(), $response->getInstallment());
         }
 
-        if (!$isWebhook) {
-            $order->addCommentToStatusHistory("Payment ID: ".$response->getPaymentId()." - Conversation ID:".$response->getConversationId());
+        if ($webhook === 'v3') {
+            $this->updatePaymentAdditionalInformationForWebhook($payment, $response);
+        }
+
+        if ($webhook === 'yes') {
+            $this->updatePaymentAdditionalInformation($payment, $response);
+        }
+
+        if ($webhook === 'no') {
+            $order->addCommentToStatusHistory("Payment ID: " . $response->getPaymentId() . " - Conversation ID:" . $response->getConversationId());
+            $this->updatePaymentAdditionalInformation($payment, $response);
         }
 
         $this->orderRepository->save($order);
@@ -135,7 +151,7 @@ readonly class OrderService
             return $this->orderRepository->get($orderId);
         } catch (Exception $e) {
             $this->errorLogger->critical(
-                "findOrderById: $orderId - Message: ".$e->getMessage(),
+                "findOrderById: $orderId - Message: " . $e->getMessage(),
                 ['fileName' => __FILE__, 'lineNumber' => __LINE__]
             );
             return null;
@@ -165,8 +181,66 @@ readonly class OrderService
     }
 
     /**
-     * Cancel Order
+     * Update Payment Additional Information
      *
+     * This function is responsible for updating the payment additional information.
+     *
+     * @param  OrderPaymentInterface|null  $payment
+     * @param  CheckoutForm  $response
+     * @return void
+     */
+    private function updatePaymentAdditionalInformation(
+        OrderPaymentInterface|null $payment,
+        CheckoutForm $response
+    ): void {
+        $payment->setLastTransId($response->getPaymentId());
+
+        $paymentAdditionalInformation = [
+            'method_title' => 'iyzipay',
+            'iyzico_payment_id' => $response->getPaymentId(),
+            'iyzico_conversation_id' => $response->getConversationId(),
+        ];
+
+        $payment->setAdditionalInformation($paymentAdditionalInformation);
+
+        $payment->setTransactionId($response->getPaymentId());
+        $payment->setIsTransactionClosed(0);
+        $payment->setTransactionAdditionalInfo(Transaction::RAW_DETAILS, json_encode($paymentAdditionalInformation));
+    }
+
+    /**
+     * Update Payment Additional Information
+     *
+     * This function is responsible for updating the payment additional information.
+     *
+     * @param  OrderPaymentInterface|null  $payment
+     * @param  WebhookData  $webhookData
+     * @return void
+     */
+    private function updatePaymentAdditionalInformationForWebhook(
+        OrderPaymentInterface|null $payment,
+        WebhookData $webhookData
+    ): void {
+        $payment->setLastTransId($webhookData->getIyziPaymentId());
+
+        $paymentAdditionalInformation = [
+            'method_title' => 'iyzipay',
+            'iyzico_payment_id' => $webhookData->getIyziPaymentId(),
+            'iyzico_conversation_id' => $webhookData->getPaymentConversationId(),
+            'iyzico_webhook_event_type' => $webhookData->getIyziEventType(),
+            'iyzico_webhook_status' => $webhookData->getStatus(),
+            'iyzico_webhook_ref_Code' => $webhookData->getIyziReferenceCode(),
+        ];
+
+        $payment->setAdditionalInformation($paymentAdditionalInformation);
+
+        $payment->setTransactionId($webhookData->getIyziPaymentId());
+        $payment->setIsTransactionClosed(0);
+        $payment->setTransactionAdditionalInfo(Transaction::RAW_DETAILS, json_encode($paymentAdditionalInformation));
+    }
+
+    /**
+     * Cancel Order
      * This function is responsible for canceling the order.
      *
      * @param  string  $orderId
@@ -261,33 +335,5 @@ readonly class OrderService
         $this->utilityHelper->validateSignature($response, $secretKey);
 
         return $response;
-    }
-
-    /**
-     * Update Payment Additional Information
-     *
-     * This function is responsible for updating the payment additional information.
-     *
-     * @param  OrderPaymentInterface|null  $payment
-     * @param  CheckoutForm  $response
-     * @return void
-     */
-    private function updatePaymentAdditionalInformation(
-        OrderPaymentInterface|null $payment,
-        CheckoutForm $response
-    ): void {
-        $payment->setLastTransId($response->getPaymentId());
-
-        $paymentAdditionalInformation = [
-            'method_title' => 'iyzipay',
-            'iyzico_payment_id' => $response->getPaymentId(),
-            'iyzico_conversation_id' => $response->getConversationId(),
-        ];
-
-        $payment->setAdditionalInformation($paymentAdditionalInformation);
-
-        $payment->setTransactionId($response->getPaymentId());
-        $payment->setIsTransactionClosed(0);
-        $payment->setTransactionAdditionalInfo(Transaction::RAW_DETAILS, json_encode($paymentAdditionalInformation));
     }
 }
