@@ -33,7 +33,7 @@ class UtilityHelper
     public function parsePrice(float $price): string
     {
         if (strpos($price, ".") === false) {
-            return $price.".0";
+            return $price . ".0";
         }
 
         $subStrIndex = 0;
@@ -43,7 +43,7 @@ class UtilityHelper
                 $subStrIndex = $i + 1;
             } else {
                 if (strcmp($priceReversed[$i], ".") == 0) {
-                    $priceReversed = "0".$priceReversed;
+                    $priceReversed = "0" . $priceReversed;
                     break;
                 } else {
                     break;
@@ -148,7 +148,7 @@ class UtilityHelper
      */
     public function generateConversationId(int $quoteId): string
     {
-        return 'QI'.$quoteId.'T'.time();
+        return 'QI' . $quoteId . 'T' . time();
     }
 
     /**
@@ -294,11 +294,11 @@ class UtilityHelper
      *
      * This function is responsible for finding the order by state and status.
      *
-     * @param  string  $responsePaymentStatus
-     * @param  string  $responseStatus
+     * @param  string|null  $responsePaymentStatus
+     * @param  string|null  $responseStatus
      * @return array
      */
-    public function findOrderByPaymentAndStatus(string $responsePaymentStatus, string $responseStatus): array
+    public function findOrderByPaymentAndStatus(string|null $responsePaymentStatus, string|null $responseStatus): array
     {
         $ordersByPaymentAndStatus = [
             'state' => '',
@@ -307,28 +307,66 @@ class UtilityHelper
             'orderJobStatus' => ''
         ];
 
-        if ($responsePaymentStatus == 'PENDING_CREDIT' && $responseStatus == 'success') {
+        $responsePaymentStatus = strtoupper($responsePaymentStatus ?? '');
+        $responseStatus = strtoupper($responseStatus ?? '');
+
+        if ($responsePaymentStatus == 'CREDIT_PAYMENT_INIT' && $responseStatus == 'INIT_CREDIT') {
             $ordersByPaymentAndStatus['state'] = 'pending_payment';
             $ordersByPaymentAndStatus['status'] = 'pending_payment';
             $ordersByPaymentAndStatus['comment'] = __('PENDING_CREDIT');
             $ordersByPaymentAndStatus['orderJobStatus'] = 'pending_payment';
         }
 
-        if ($responsePaymentStatus == 'INIT_BANK_TRANSFER' && $responseStatus == 'success') {
+        if ($responsePaymentStatus == 'PENDING_CREDIT' && $responseStatus == 'SUCCESS') {
+            $ordersByPaymentAndStatus['state'] = 'pending_payment';
+            $ordersByPaymentAndStatus['status'] = 'pending_payment';
+            $ordersByPaymentAndStatus['comment'] = __('PENDING_CREDIT');
+            $ordersByPaymentAndStatus['orderJobStatus'] = 'pending_payment';
+        }
+
+        if ($responsePaymentStatus == 'CREDIT_PAYMENT_PENDING' && $responseStatus == 'PENDING_CREDIT') {
+            $ordersByPaymentAndStatus['state'] = 'pending_payment';
+            $ordersByPaymentAndStatus['status'] = 'pending_payment';
+            $ordersByPaymentAndStatus['comment'] = __('PENDING_CREDIT');
+            $ordersByPaymentAndStatus['orderJobStatus'] = 'pending_payment';
+        }
+
+        if ($responsePaymentStatus == 'CREDIT_PAYMENT_AUTH' && $responseStatus == 'SUCCESS') {
+            $ordersByPaymentAndStatus['state'] = 'processing';
+            $ordersByPaymentAndStatus['status'] = 'processing';
+            $ordersByPaymentAndStatus['comment'] = __('SUCCESS');
+            $ordersByPaymentAndStatus['orderJobStatus'] = 'pending_payment';
+        }
+
+        if ($responsePaymentStatus == 'CREDIT_PAYMENT_AUTH' && $responseStatus == 'FAILURE') {
+            $ordersByPaymentAndStatus['state'] = 'canceled';
+            $ordersByPaymentAndStatus['status'] = 'canceled';
+            $ordersByPaymentAndStatus['comment'] = __('FAILURE');
+            $ordersByPaymentAndStatus['orderJobStatus'] = 'canceled';
+        }
+
+        if ($responsePaymentStatus == 'INIT_BANK_TRANSFER' && $responseStatus == 'SUCCESS') {
             $ordersByPaymentAndStatus['state'] = 'pending_payment';
             $ordersByPaymentAndStatus['status'] = 'pending_payment';
             $ordersByPaymentAndStatus['comment'] = __('INIT_BANK_TRANSFER');
             $ordersByPaymentAndStatus['orderJobStatus'] = 'pending_payment';
         }
 
-        if ($responsePaymentStatus == 'INIT_THREEDS' && $responseStatus == 'success') {
+        if ($responsePaymentStatus == 'BANK_TRANSFER_AUTH' && $responseStatus == 'SUCCESS') {
+            $ordersByPaymentAndStatus['state'] = 'processing';
+            $ordersByPaymentAndStatus['status'] = 'processing';
+            $ordersByPaymentAndStatus['comment'] = __('SUCCESS');
+            $ordersByPaymentAndStatus['orderJobStatus'] = 'processing';
+        }
+
+        if ($responsePaymentStatus == 'INIT_THREEDS' && $responseStatus == 'SUCCESS') {
             $ordersByPaymentAndStatus['state'] = 'pending_payment';
             $ordersByPaymentAndStatus['status'] = 'pending_payment';
             $ordersByPaymentAndStatus['comment'] = __('INIT_THREEDS_CRON');
             $ordersByPaymentAndStatus['orderJobStatus'] = 'pending_payment';
         }
 
-        if ($responsePaymentStatus == 'SUCCESS' && $responseStatus == 'success') {
+        if ($responsePaymentStatus == 'SUCCESS' && $responseStatus == 'SUCCESS') {
             $ordersByPaymentAndStatus['state'] = 'processing';
             $ordersByPaymentAndStatus['status'] = 'processing';
             $ordersByPaymentAndStatus['comment'] = __('SUCCESS');
@@ -343,5 +381,22 @@ class UtilityHelper
         }
 
         return $ordersByPaymentAndStatus;
+    }
+
+    /**
+     * Calculate Subtotal Price
+     *
+     * @param  $order
+     * @return string
+     */
+    public function calculateSubTotalPrice($order): string
+    {
+        $price = 0;
+        foreach ($order->getAllVisibleItems() as $item) {
+            $price += round($item->getPrice(), 2);
+        }
+
+        $price += $order->getShippingAddress()->getShippingAmount() ?? 0;
+        return $this->parsePrice($price);
     }
 }
