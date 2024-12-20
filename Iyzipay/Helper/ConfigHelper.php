@@ -3,6 +3,7 @@
 namespace Iyzico\Iyzipay\Helper;
 
 use Magento\Framework\App\Config\ScopeConfigInterface;
+use Magento\Framework\App\Config\Storage\WriterInterface;
 use Magento\Framework\App\ObjectManager;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\Exception\NoSuchEntityException;
@@ -12,8 +13,9 @@ use Magento\Store\Model\StoreManagerInterface;
 readonly class ConfigHelper
 {
     public function __construct(
-        private StoreManagerInterface $storeManager,
-        private ScopeConfigInterface $scopeConfig
+        protected StoreManagerInterface $storeManager,
+        protected ScopeConfigInterface $scopeConfig,
+        protected WriterInterface $configWriter
     ) {
     }
 
@@ -184,23 +186,6 @@ readonly class ConfigHelper
     }
 
     /**
-     * Get Iyzipay Module order_status from configuration : TODO
-     *
-     * This function is responsible for getting the order status from the configuration.
-     *
-     * @return string
-     * @throws LocalizedException
-     */
-    public function getIyzipayOrderStatus(): string
-    {
-        return $this->scopeConfig->getValue(
-            'payment/iyzipay/order_status',
-            $this->getScopeInterface(),
-            $this->getWebsiteId()
-        );
-    }
-
-    /**
      * Get Iyzipay Magento Payment Source
      *
      * This function is responsible for getting the payment source.
@@ -227,10 +212,10 @@ readonly class ConfigHelper
      *
      * This function is responsible for getting the overlay script.
      *
-     * @return string
+     * @return mixed
      * @throws LocalizedException
      */
-    public function getOverlayScript(): string
+    public function getOverlayScript(): mixed
     {
         return $this->scopeConfig->getValue(
             'payment/iyzipay/overlayscript',
@@ -255,4 +240,50 @@ readonly class ConfigHelper
         return $this->storeManager->getDefaultStoreView()->getBaseUrl();
     }
 
+    /**
+     * Get Common Cron Settings
+     *
+     * @return mixed
+     * @throws LocalizedException
+     */
+    public function getCommonCronSettings(): mixed
+    {
+        return $this->scopeConfig->getValue(
+            'payment/iyzipay/common_cron_settings',
+            $this->getScopeInterface(),
+            $this->getWebsiteId()
+        );
+    }
+
+    /**
+     * Get Custom Cron Settings
+     *
+     * @return mixed
+     * @throws LocalizedException
+     */
+    public function getCustomCronSettings(): mixed
+    {
+        return $this->scopeConfig->getValue(
+            'payment/iyzipay/custom_cron_settings',
+            $this->getScopeInterface(),
+            $this->getWebsiteId()
+        );
+    }
+
+    /**
+     * Set Cron Settings
+     *
+     * @param $value
+     * @return void
+     * @throws LocalizedException
+     */
+    public function setCronSettings($value): void
+    {
+        $this->configWriter->save(
+            'crontab/default/jobs/iyzico_process_pending_orders/schedule/cron_expr',
+            $value,
+            $this->getScopeInterface(),
+            $this->getWebsiteId()
+        );
+    }
 }
