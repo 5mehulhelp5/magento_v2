@@ -180,7 +180,7 @@ class Webhook implements WebhookInterface
         $conversationId = $webhookData->getPaymentConversationId();
         $response = $this->orderService->retrieveAndValidateCheckoutForm($token, $conversationId);
         $orderId = $this->orderJobService->findParametersByToken($token, 'order_id');
-        $this->orderService->updateOrderPaymentStatus($orderId, $webhookData, 'v3');
+        $this->orderService->updateOrderPaymentStatus($orderId, $response, 'yes');
     }
 
     /**
