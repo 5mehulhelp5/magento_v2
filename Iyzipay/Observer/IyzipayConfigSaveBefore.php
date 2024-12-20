@@ -29,26 +29,32 @@ use Iyzico\Iyzipay\Library\Options;
 use Iyzico\Iyzipay\Library\Request\RetrieveProtectedOverleyScriptRequest;
 use Magento\Framework\App\Config\Storage\WriterInterface;
 use Magento\Framework\App\Request\Http;
-use Magento\Framework\Event\Observer as EventObserver;
+use Magento\Framework\Event\Observer;
 use Magento\Framework\Event\ObserverInterface;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Store\Model\ScopeInterface;
 
 
-readonly class IyzipayConfigSaveBefore implements ObserverInterface
+class IyzipayConfigSaveBefore implements ObserverInterface
 {
     public function __construct(
-        private UtilityHelper $utilityHelper,
-        private ConfigHelper $configHelper,
-        private WriterInterface $configWriter,
-        private Http $request
+        protected readonly UtilityHelper $utilityHelper,
+        protected readonly ConfigHelper $configHelper,
+        protected WriterInterface $configWriter,
+        protected Http $request
     ) {
     }
 
     /**
+     * Execute observer
+     *
+     * This method is called when the event specified in the events.xml file is triggered.
+     *
+     * @param  Observer  $observer
+     * @return void
      * @throws LocalizedException
      */
-    public function execute(EventObserver $observer): void
+    public function execute(Observer $observer): void
     {
         $this->webhookUrlKey();
         $this->webhookSetControll();
@@ -91,9 +97,13 @@ readonly class IyzipayConfigSaveBefore implements ObserverInterface
     }
 
     /**
+     * Get or Create Webhook Url Key
+     *
+     * This method webhook url key control and create
+     *
      * @throws LocalizedException
      */
-    public function webhookUrlKey(): void
+    private function webhookUrlKey(): void
     {
         $websiteId = $this->configHelper->getWebsiteId();
         $webhookUrlKey = $this->configHelper->getWebhookUrlKey();
@@ -110,9 +120,13 @@ readonly class IyzipayConfigSaveBefore implements ObserverInterface
     }
 
     /**
+     * Webhook Set Controll
+     *
+     * This method webhook is active control after save config
+     *
      * @throws LocalizedException
      */
-    public function webhookSetControll(): void
+    private function webhookSetControll(): void
     {
         $websiteId = $this->configHelper->getWebsiteId();
         $webhookActive = $this->configHelper->getWebhookUrlKeyActive();
