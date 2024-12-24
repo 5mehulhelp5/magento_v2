@@ -27,19 +27,17 @@ class Subtotal extends \Magento\Sales\Model\Order\Total\AbstractTotal
     /**
      * Collect Creditmemo subtotal
      *
-     * @param \Magento\Sales\Model\Order\Creditmemo $creditmemo
+     * @param  \Magento\Sales\Model\Order\Creditmemo  $creditmemo
      * @return $this
      */
     public function collect(\Magento\Sales\Model\Order\Creditmemo $creditmemo)
     {
-
         $subtotal = 0;
         $baseSubtotal = 0;
         $subtotalInclTax = 0;
         $baseSubtotalInclTax = 0;
 
         foreach ($creditmemo->getAllItems() as $item) {
-
             if ($item->getOrderItem()->isDummy()) {
                 continue;
             }
@@ -50,12 +48,11 @@ class Subtotal extends \Magento\Sales\Model\Order\Total\AbstractTotal
             $baseSubtotal += $item->getBaseRowTotal();
             $subtotalInclTax += $item->getRowTotalInclTax();
             $baseSubtotalInclTax += $item->getBaseRowTotalInclTax();
-
         }
 
-        if ((double)$creditmemo->getOrder()->getInstallmentFee() != 0) {
-            $subtotal+= $creditmemo->getOrder()->getInstallmentFee();
-            $baseSubtotal+= $creditmemo->getOrder()->getInstallmentFee();
+        if ((double) $creditmemo->getOrder()->getInstallmentFee() != 0) {
+            $subtotal += $creditmemo->getOrder()->getInstallmentFee();
+            $baseSubtotal += $creditmemo->getOrder()->getInstallmentFee();
         }
 
 

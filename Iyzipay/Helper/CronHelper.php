@@ -27,7 +27,7 @@ use Magento\Framework\Exception\LocalizedException;
 class CronHelper
 {
     public function __construct(
-        protected readonly ConfigHelper $configHelper
+        protected ConfigHelper $configHelper
     ) {
     }
 
