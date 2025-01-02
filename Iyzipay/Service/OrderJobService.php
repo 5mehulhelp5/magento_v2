@@ -60,12 +60,7 @@ class OrderJobService
             }
 
             $iyzicoOrderJob->setStatus($status);
-
-            if ($status == 'processing' || $status == 'canceled') {
-                $this->iyziOrderJobResource->delete($iyzicoOrderJob);
-            } else {
-                $this->iyziOrderJobResource->save($iyzicoOrderJob);
-            }
+            $this->iyziOrderJobResource->save($iyzicoOrderJob);
         } catch (Throwable $th) {
             $this->errorLogger->critical("setOrderJobStatus: ".$th->getMessage(), [
                 'fileName' => __FILE__,
@@ -106,12 +101,21 @@ class OrderJobService
      * @param  string  $token
      * @param  string  $find
      * @return mixed
+     * @throws Exception
      */
     public function findParametersByToken(string $token, string $find): mixed
     {
-        $iyzicoOrderJob = $this->iyziOrderJobFactory->create();
-        $this->iyziOrderJobResource->load($iyzicoOrderJob, $token, 'iyzico_payment_token');
-        return $iyzicoOrderJob->getData($find);
+        try {
+            $iyzicoOrderJob = $this->iyziOrderJobFactory->create();
+            $this->iyziOrderJobResource->load($iyzicoOrderJob, $token, 'iyzico_payment_token');
+            return $iyzicoOrderJob->getData($find);
+        } catch (Throwable $th) {
+            $this->errorLogger->critical("findParametersByToken: ".$th->getMessage(), [
+                'fileName' => __FILE__,
+                'lineNumber' => __LINE__,
+            ]);
+            throw new Exception($th->getMessage());
+        }
     }
 
     /**
