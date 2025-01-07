@@ -23,6 +23,7 @@
 namespace Iyzico\Iyzipay\Helper;
 
 use Iyzico\Iyzipay\Library\Model\CheckoutForm;
+use Iyzico\Iyzipay\Logger\IyziErrorLogger;
 use Iyzico\Iyzipay\Model\IyziCardFactory;
 use Magento\Customer\Model\Session as CustomerSession;
 use Magento\Framework\Exception\LocalizedException;
@@ -329,6 +330,9 @@ class UtilityHelper
 
         $responsePaymentStatus = strtoupper($responsePaymentStatus ?? '');
         $responseStatus = strtoupper($responseStatus ?? '');
+
+        $logger = new IyziErrorLogger();
+        $logger->info("responsePaymentStatus: $responsePaymentStatus, responseStatus: $responseStatus");
 
         if ($responsePaymentStatus == 'CREDIT_PAYMENT_INIT' && $responseStatus == 'INIT_CREDIT') {
             $ordersByPaymentAndStatus['state'] = 'pending_payment';

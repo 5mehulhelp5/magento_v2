@@ -126,6 +126,9 @@ class OrderService
 
         $ordersByPaymentAndStatus = $this->utilityHelper->findOrderByPaymentAndStatus($paymentStatus, $status);
 
+        $arrString = implode(", ", $ordersByPaymentAndStatus);
+        $this->errorLogger->info("ordersByPaymentAndStatus: $arrString");
+
         $order->setState($ordersByPaymentAndStatus['state']);
         $order->setStatus($ordersByPaymentAndStatus['status']);
         $order->addCommentToStatusHistory($ordersByPaymentAndStatus['comment']);
