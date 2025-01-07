@@ -32,6 +32,12 @@ use Magento\Quote\Model\Quote;
 class UtilityHelper
 {
     private const COOKIE_EXPIRE_TIME = 86400;
+    public $logger;
+
+    public function __construct()
+    {
+        $this->logger = new IyziErrorLogger();
+    }
 
     /**
      * Calculate Installment Price
@@ -331,7 +337,6 @@ class UtilityHelper
         $responsePaymentStatus = strtoupper($responsePaymentStatus ?? '');
         $responseStatus = strtoupper($responseStatus ?? '');
 
-        $logger = new IyziErrorLogger();
         $logger->info("responsePaymentStatus: $responsePaymentStatus, responseStatus: $responseStatus");
 
         if ($responsePaymentStatus == 'CREDIT_PAYMENT_INIT' && $responseStatus == 'INIT_CREDIT') {
