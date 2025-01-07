@@ -32,12 +32,6 @@ use Magento\Quote\Model\Quote;
 class UtilityHelper
 {
     private const COOKIE_EXPIRE_TIME = 86400;
-    public $logger;
-
-    public function __construct()
-    {
-        $this->logger = new IyziErrorLogger();
-    }
 
     /**
      * Calculate Installment Price
@@ -60,7 +54,7 @@ class UtilityHelper
     public function parsePrice(float $price): string
     {
         if (strpos($price, ".") === false) {
-            return $price.".0";
+            return $price . ".0";
         }
 
         $subStrIndex = 0;
@@ -70,7 +64,7 @@ class UtilityHelper
                 $subStrIndex = $i + 1;
             } else {
                 if (strcmp($priceReversed[$i], ".") == 0) {
-                    $priceReversed = "0".$priceReversed;
+                    $priceReversed = "0" . $priceReversed;
                     break;
                 } else {
                     break;
@@ -175,7 +169,7 @@ class UtilityHelper
      */
     public function generateConversationId(int $quoteId): string
     {
-        return 'QI'.$quoteId.'T'.time();
+        return 'QI' . $quoteId . 'T' . time();
     }
 
     /**
@@ -336,8 +330,6 @@ class UtilityHelper
 
         $responsePaymentStatus = strtoupper($responsePaymentStatus ?? '');
         $responseStatus = strtoupper($responseStatus ?? '');
-
-        $logger->info("responsePaymentStatus: $responsePaymentStatus, responseStatus: $responseStatus");
 
         if ($responsePaymentStatus == 'CREDIT_PAYMENT_INIT' && $responseStatus == 'INIT_CREDIT') {
             $ordersByPaymentAndStatus['state'] = 'pending_payment';
