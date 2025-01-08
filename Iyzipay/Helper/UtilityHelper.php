@@ -23,7 +23,6 @@
 namespace Iyzico\Iyzipay\Helper;
 
 use Iyzico\Iyzipay\Library\Model\CheckoutForm;
-use Iyzico\Iyzipay\Logger\IyziErrorLogger;
 use Iyzico\Iyzipay\Model\IyziCardFactory;
 use Magento\Customer\Model\Session as CustomerSession;
 use Magento\Framework\Exception\LocalizedException;
@@ -54,7 +53,7 @@ class UtilityHelper
     public function parsePrice(float $price): string
     {
         if (strpos($price, ".") === false) {
-            return $price . ".0";
+            return $price.".0";
         }
 
         $subStrIndex = 0;
@@ -64,7 +63,7 @@ class UtilityHelper
                 $subStrIndex = $i + 1;
             } else {
                 if (strcmp($priceReversed[$i], ".") == 0) {
-                    $priceReversed = "0" . $priceReversed;
+                    $priceReversed = "0".$priceReversed;
                     break;
                 } else {
                     break;
@@ -169,7 +168,7 @@ class UtilityHelper
      */
     public function generateConversationId(int $quoteId): string
     {
-        return 'QI' . $quoteId . 'T' . time();
+        return 'QI'.$quoteId.'T'.time();
     }
 
     /**
@@ -385,6 +384,20 @@ class UtilityHelper
             $ordersByPaymentAndStatus['status'] = 'pending_payment';
             $ordersByPaymentAndStatus['comment'] = __('INIT_THREEDS_CRON');
             $ordersByPaymentAndStatus['orderJobStatus'] = 'pending_payment';
+        }
+
+        if ($responsePaymentStatus == 'CHECKOUT_FORM_AUTH' && $responseStatus == 'SUCCESS') {
+            $ordersByPaymentAndStatus['state'] = 'processing';
+            $ordersByPaymentAndStatus['status'] = 'processing';
+            $ordersByPaymentAndStatus['comment'] = __('SUCCESS');
+            $ordersByPaymentAndStatus['orderJobStatus'] = 'processing';
+        }
+
+        if ($responsePaymentStatus == 'BALANCE' && $responseStatus == 'SUCCESS') {
+            $ordersByPaymentAndStatus['state'] = 'processing';
+            $ordersByPaymentAndStatus['status'] = 'processing';
+            $ordersByPaymentAndStatus['comment'] = __('SUCCESS');
+            $ordersByPaymentAndStatus['orderJobStatus'] = 'processing';
         }
 
         if ($responsePaymentStatus == 'SUCCESS' && $responseStatus == 'SUCCESS') {
