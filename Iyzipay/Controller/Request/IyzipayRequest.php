@@ -29,7 +29,6 @@ use Iyzico\Iyzipay\Library\Model\CheckoutFormInitialize;
 use Iyzico\Iyzipay\Library\Options;
 use Iyzico\Iyzipay\Library\Request\CreateCheckoutFormInitializeRequest;
 use Iyzico\Iyzipay\Model\IyziCardFactory;
-use Iyzico\Iyzipay\Model\IyziInstallmentFactory;
 use Iyzico\Iyzipay\Service\OneTimeUrlService;
 use Iyzico\Iyzipay\Service\OrderJobService;
 use Iyzico\Iyzipay\Service\OrderService;
@@ -38,6 +37,8 @@ use Magento\Customer\Model\Session as CustomerSession;
 use Magento\Framework\App\ActionInterface;
 use Magento\Framework\Controller\Result\Json;
 use Magento\Framework\Controller\Result\JsonFactory;
+use Magento\Framework\Exception\LocalizedException;
+use Magento\Framework\Exception\NoSuchEntityException;
 use Magento\Quote\Api\CartManagementInterface;
 use Magento\Quote\Api\CartRepositoryInterface;
 use Magento\Quote\Model\Quote;
@@ -47,26 +48,29 @@ class IyzipayRequest implements ActionInterface
 {
     public function __construct
     (
-        protected CheckoutSession         $checkoutSession,
-        protected CustomerSession         $customerSession,
-        protected IyziCardFactory         $iyziCardFactory,
-        protected JsonFactory             $resultJsonFactory,
-        protected Quote                   $quote,
-        protected ConfigHelper            $configHelper,
-        protected UtilityHelper           $utilityHelper,
-        protected ObjectHelper            $objectHelper,
-        protected OrderJobService         $orderJobService,
-        protected OrderService            $orderService,
+        protected CheckoutSession $checkoutSession,
+        protected CustomerSession $customerSession,
+        protected IyziCardFactory $iyziCardFactory,
+        protected JsonFactory $resultJsonFactory,
+        protected Quote $quote,
+        protected ConfigHelper $configHelper,
+        protected UtilityHelper $utilityHelper,
+        protected ObjectHelper $objectHelper,
+        protected OrderJobService $orderJobService,
+        protected OrderService $orderService,
         protected CartManagementInterface $cartManagement,
         protected CartRepositoryInterface $cartRepository,
-        protected OneTimeUrlService       $oneTimeUrlService,
-        protected IyziInstallmentFactory  $iyziInstallmentFactory
-    )
-    {
+        protected OneTimeUrlService $oneTimeUrlService
+    ) {
     }
 
     /**
+     * Execute
+     *
      * This function is responsible for executing the payment request.
+     *
+     * @throws NoSuchEntityException
+     * @throws LocalizedException
      */
     public function execute(): Json
     {
@@ -100,10 +104,10 @@ class IyzipayRequest implements ActionInterface
             $paidPrice = $this->utilityHelper->parsePrice(round($checkoutSession->getGrandTotal(), 2));
 
             // Configure the address
-            $shippingAddress = $this->objectHelper->createAddress($checkoutSession->getShippingAddress());
-            $billingAddress = $this->objectHelper->createAddress($checkoutSession->getBillingAddress());
+            $shippingAddress = $this->objectHelper->createShippingAddress($checkoutSession);
+            $billingAddress = $this->objectHelper->createBillingAddress($checkoutSession);
 
-            // Configure the enabled installments
+            // Configure the installment
             $installments = $this->objectHelper->getInstallment($checkoutSession);
 
             // Create the request
